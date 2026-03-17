@@ -1,0 +1,11 @@
+Django==5.2.1
+djangorestframework==3.16.0
+djangorestframework-simplejwt==5.4.0
+django-filter==25.1
+psycopg[binary]==3.2.10
+mssql-django==1.6
+pyodbc==5.2.0
+python-dotenv==1.0.1
+drf-spectacular==0.28.0
+django-cors-headers==4.7.0
+requests==2.32.3

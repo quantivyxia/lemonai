@@ -1,0 +1,179 @@
+import type {
+  AccessLog,
+  PermissionMatrixRow,
+  RoleAssignment,
+  TenantBranding,
+  UserGroup,
+} from '@/types/entities'
+
+export const groupsMock: UserGroup[] = [
+  {
+    id: 'g-001',
+    tenantId: 't-001',
+    tenantName: 'Nexa Consultoria',
+    name: 'Diretoria Executiva',
+    description: 'Acompanha indicadores consolidados de negocio e risco.',
+    users: ['Camila Araujo', 'Rafael Nunes', 'Isabela Dias'],
+    dashboards: ['Executivo Comercial', 'Financeiro Consolidado'],
+  },
+  {
+    id: 'g-002',
+    tenantId: 't-002',
+    tenantName: 'Solaris Foods',
+    name: 'BI Squad Operacional',
+    description: 'Responsavel por monitorar eficiencia operacional e SLA.',
+    users: ['Lucas Pereira', 'Bruna Matos', 'Ana Ribeiro'],
+    dashboards: ['Operacoes Latam', 'Projetos PMO'],
+  },
+]
+
+export const permissionMatrixMock: PermissionMatrixRow[] = [
+  {
+    key: 'dashboard.view',
+    label: 'Visualizar dashboards',
+    description: 'Permite abrir dashboards autorizados.',
+    byRole: { super_admin: true, analyst: true, viewer: true },
+  },
+  {
+    key: 'dashboard.manage',
+    label: 'Gerenciar dashboards',
+    description: 'Criacao, edicao e publicacao de dashboards.',
+    byRole: { super_admin: true, analyst: true, viewer: false },
+  },
+  {
+    key: 'users.manage',
+    label: 'Gerenciar usuarios',
+    description: 'Criar, editar, ativar e desativar usuarios.',
+    byRole: { super_admin: true, analyst: true, viewer: false },
+  },
+  {
+    key: 'groups.manage',
+    label: 'Gerenciar grupos',
+    description: 'Associar usuarios e dashboards em grupos.',
+    byRole: { super_admin: true, analyst: true, viewer: false },
+  },
+  {
+    key: 'audit.view',
+    label: 'Visualizar auditoria',
+    description: 'Consulta de logs de acesso e falhas.',
+    byRole: { super_admin: true, analyst: true, viewer: false },
+  },
+  {
+    key: 'branding.manage',
+    label: 'Configurar white-label',
+    description: 'Atualizar identidade visual e dominio.',
+    byRole: { super_admin: true, analyst: true, viewer: false },
+  },
+  {
+    key: 'tenants.manage',
+    label: 'Gerenciar tenants',
+    description: 'Criar e editar tenants da plataforma.',
+    byRole: { super_admin: true, analyst: false, viewer: false },
+  },
+]
+
+export const roleAssignmentsMock: RoleAssignment[] = [
+  {
+    role: 'super_admin',
+    users: ['Camila Araujo'],
+    groups: ['Governanca Global'],
+  },
+  {
+    role: 'analyst',
+    users: ['Guilherme Prado', 'Ana Ribeiro', 'Lucas Pereira', 'Bruna Matos'],
+    groups: ['BI Squad Operacional'],
+  },
+  {
+    role: 'viewer',
+    users: ['Marina Costa', 'Rafael Nunes'],
+    groups: ['Diretoria Executiva'],
+  },
+]
+
+export const accessLogsMock: AccessLog[] = [
+  {
+    id: 'log-001',
+    tenantId: 't-001',
+    userName: 'Guilherme Prado',
+    tenantName: 'Nexa Consultoria',
+    dashboardName: 'Executivo Comercial',
+    ipAddress: '177.84.21.13',
+    accessedAt: '2026-03-08T11:43:00Z',
+    status: 'success',
+    origin: 'portal',
+  },
+  {
+    id: 'log-002',
+    tenantId: 't-002',
+    userName: 'Ana Ribeiro',
+    tenantName: 'Solaris Foods',
+    dashboardName: 'Operacoes Latam',
+    ipAddress: '189.102.77.40',
+    accessedAt: '2026-03-08T11:31:00Z',
+    status: 'success',
+    origin: 'portal',
+  },
+  {
+    id: 'log-003',
+    tenantId: 't-003',
+    userName: 'Marina Costa',
+    tenantName: 'Vanguard Retail',
+    dashboardName: 'Projetos PMO',
+    ipAddress: '200.149.11.8',
+    accessedAt: '2026-03-08T10:58:00Z',
+    status: 'denied',
+    origin: 'portal',
+  },
+  {
+    id: 'log-004',
+    tenantId: 't-002',
+    userName: 'Lucas Pereira',
+    tenantName: 'Solaris Foods',
+    dashboardName: 'Operacoes Latam',
+    ipAddress: '201.23.81.61',
+    accessedAt: '2026-03-08T10:12:00Z',
+    status: 'success',
+    origin: 'api',
+  },
+  {
+    id: 'log-005',
+    tenantId: 'global',
+    userName: 'Camila Araujo',
+    tenantName: 'InsightHub Global',
+    dashboardName: 'Financeiro Consolidado',
+    ipAddress: '10.0.0.44',
+    accessedAt: '2026-03-08T09:49:00Z',
+    status: 'error',
+    origin: 'portal',
+  },
+  {
+    id: 'log-006',
+    tenantId: 't-002',
+    userName: 'Bruna Matos',
+    tenantName: 'Solaris Foods',
+    dashboardName: 'Operacoes Latam',
+    ipAddress: '187.111.12.22',
+    accessedAt: '2026-03-08T09:07:00Z',
+    status: 'success',
+    origin: 'mobile',
+  },
+]
+
+export const brandingByTenantMock: TenantBranding[] = [
+  {
+    tenantId: 't-001',
+    tenantName: 'Nexa Consultoria',
+    platformName: 'Nexa Insights Portal',
+    primaryColor: '#0f6fe8',
+    secondaryColor: '#0ea5a4',
+    domain: 'nexa.analytics.app',
+  },
+  {
+    tenantId: 't-002',
+    tenantName: 'Solaris Foods',
+    platformName: 'Solaris Metrics Hub',
+    primaryColor: '#1d4ed8',
+    secondaryColor: '#14b8a6',
+    domain: 'solaris.insights.app',
+  },
+]
