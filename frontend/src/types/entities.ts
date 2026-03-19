@@ -6,6 +6,8 @@ export type AccessStatus = 'success' | 'denied' | 'error'
 export type AccessOrigin = 'portal' | 'api' | 'mobile'
 export type WorkspaceStatus = 'active' | 'inactive' | 'syncing'
 export type RLSRuleType = 'allow' | 'deny'
+export type SystemEventLevel = 'info' | 'warn' | 'error'
+export type SystemEventCategory = 'auth' | 'authorization' | 'admin' | 'integration' | 'system'
 
 export type Tenant = {
   id: string
@@ -15,10 +17,15 @@ export type Tenant = {
   dashboardsCount: number
   maxUsers: number
   maxDashboards: number
+  supportHoursTotal: number
+  supportHoursConsumed: number
+  supportHoursRemaining: number
   usersLimitReached: boolean
   dashboardsLimitReached: boolean
+  supportLimitReached: boolean
   usersUsagePercent: number
   dashboardsUsagePercent: number
+  supportUsagePercent: number
   brandingConfigured: boolean
   createdAt: string
 }
@@ -109,6 +116,59 @@ export type AccessLog = {
   accessedAt: string
   status: AccessStatus
   origin: AccessOrigin
+}
+
+export type SystemEventLog = {
+  id: string
+  userName: string
+  tenantName: string
+  level: SystemEventLevel
+  category: SystemEventCategory
+  action: string
+  message: string
+  resourceType?: string
+  resourceId?: string
+  endpoint: string
+  method: string
+  requestId: string
+  ipAddress?: string
+  statusCode?: number
+  metadata?: Record<string, unknown>
+  createdAt: string
+}
+
+export type SystemSummary = {
+  status: 'ok'
+  requestId: string
+  timestamp: string
+  counts: {
+    tenants: number
+    users: number
+    dashboards: number
+    workspaces: number
+    powerbiConnections: number
+    powerbiGateways: number
+    accessLogs: number
+    systemEvents: number
+  }
+  powerbi: {
+    activeConnections: number
+    connectionsWithError: number
+    gatewaysWithError: number
+  }
+  recent: {
+    latestSystemEvent?: {
+      created_at: string
+      level: SystemEventLevel
+      category: SystemEventCategory
+      action: string
+    } | null
+    latestAccessLog?: {
+      accessed_at: string
+      status: AccessStatus
+      origin: AccessOrigin
+    } | null
+  }
 }
 
 export type TenantBranding = {

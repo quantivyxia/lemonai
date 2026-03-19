@@ -3,7 +3,10 @@ import type { AuthTokens, SessionUser, ViewAsSession } from '@/types/session'
 const SESSION_KEY = 'insighthub.session'
 const TOKENS_KEY = 'insighthub.tokens'
 const VIEW_AS_KEY = 'insighthub.view-as'
+const PERSISTENCE_KEY = 'insighthub.persistence'
 export const VIEW_AS_CLEARED_EVENT = 'insighthub:view-as-cleared'
+
+type StorageMode = 'local' | 'session'
 
 const parseJSON = <T>(raw: string | null): T | null => {
   if (!raw) return null
@@ -15,29 +18,60 @@ const parseJSON = <T>(raw: string | null): T | null => {
   }
 }
 
+const storages: Record<StorageMode, Storage> = {
+  local: localStorage,
+  session: sessionStorage,
+}
+
+const getModeFromStorage = (): StorageMode => {
+  const localMode = localStorage.getItem(PERSISTENCE_KEY)
+  if (localMode === 'local' || localMode === 'session') return localMode
+  const sessionMode = sessionStorage.getItem(PERSISTENCE_KEY)
+  if (sessionMode === 'local' || sessionMode === 'session') return sessionMode
+  return localStorage.getItem(TOKENS_KEY) || localStorage.getItem(SESSION_KEY) ? 'local' : 'session'
+}
+
+const readFromAny = <T>(key: string): T | null => {
+  return parseJSON<T>(localStorage.getItem(key)) ?? parseJSON<T>(sessionStorage.getItem(key))
+}
+
+const clearKeyEverywhere = (key: string) => {
+  localStorage.removeItem(key)
+  sessionStorage.removeItem(key)
+}
+
+const getActiveStorage = () => storages[getModeFromStorage()]
+
 export const sessionStorageService = {
   getSession(): SessionUser | null {
-    return parseJSON<SessionUser>(localStorage.getItem(SESSION_KEY))
+    return readFromAny<SessionUser>(SESSION_KEY)
   },
 
-  setSession(user: SessionUser) {
-    localStorage.setItem(SESSION_KEY, JSON.stringify(user))
+  setSession(user: SessionUser, remember = true) {
+    clearKeyEverywhere(SESSION_KEY)
+    const mode: StorageMode = remember ? 'local' : 'session'
+    storages[mode].setItem(SESSION_KEY, JSON.stringify(user))
+    storages[mode].setItem(PERSISTENCE_KEY, mode)
   },
 
   getTokens(): AuthTokens | null {
-    return parseJSON<AuthTokens>(localStorage.getItem(TOKENS_KEY))
+    return readFromAny<AuthTokens>(TOKENS_KEY)
   },
 
   getViewAsSession(): ViewAsSession | null {
-    return parseJSON<ViewAsSession>(localStorage.getItem(VIEW_AS_KEY))
+    return readFromAny<ViewAsSession>(VIEW_AS_KEY)
   },
 
-  setTokens(tokens: AuthTokens) {
-    localStorage.setItem(TOKENS_KEY, JSON.stringify(tokens))
+  setTokens(tokens: AuthTokens, remember = true) {
+    clearKeyEverywhere(TOKENS_KEY)
+    const mode: StorageMode = remember ? 'local' : 'session'
+    storages[mode].setItem(TOKENS_KEY, JSON.stringify(tokens))
+    storages[mode].setItem(PERSISTENCE_KEY, mode)
   },
 
   setViewAsSession(user: ViewAsSession) {
-    localStorage.setItem(VIEW_AS_KEY, JSON.stringify(user))
+    clearKeyEverywhere(VIEW_AS_KEY)
+    getActiveStorage().setItem(VIEW_AS_KEY, JSON.stringify(user))
   },
 
   getAccessToken() {
@@ -51,19 +85,20 @@ export const sessionStorageService = {
   setAccessToken(access: string) {
     const current = this.getTokens()
     if (!current) return
-    this.setTokens({ ...current, access })
+    this.setTokens({ ...current, access }, getModeFromStorage() === 'local')
   },
 
   clearViewAsSession() {
-    localStorage.removeItem(VIEW_AS_KEY)
+    clearKeyEverywhere(VIEW_AS_KEY)
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent(VIEW_AS_CLEARED_EVENT))
     }
   },
 
   clear() {
-    localStorage.removeItem(SESSION_KEY)
-    localStorage.removeItem(TOKENS_KEY)
-    localStorage.removeItem(VIEW_AS_KEY)
+    clearKeyEverywhere(SESSION_KEY)
+    clearKeyEverywhere(TOKENS_KEY)
+    clearKeyEverywhere(VIEW_AS_KEY)
+    clearKeyEverywhere(PERSISTENCE_KEY)
   },
 }

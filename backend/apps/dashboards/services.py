@@ -179,7 +179,17 @@ class PowerBIEmbedService:
             except PowerBIServiceError as exc:
                 raise EmbedIntegrationError(str(exc)) from exc
 
-        # Fallback demo para ambiente ainda sem conexao configurada.
+        allow_demo_fallback = os.getenv('INSIGHTHUB_ALLOW_DEMO_EMBED_FALLBACK', 'false').strip().lower() in {
+            '1',
+            'true',
+            'yes',
+            'on',
+        }
+        if not allow_demo_fallback:
+            raise EmbedIntegrationError(
+                'Nenhuma conexao Power BI ativa encontrada para gerar o embed em modo de producao.'
+            )
+
         seed = f'{dashboard.id}:{user.id}:{len(rls_context)}'
         prefix = os.getenv('INSIGHTHUB_EMBED_TOKEN_PREFIX', 'demo-embed-token')
         token = f'{prefix}:{seed}'
@@ -188,7 +198,7 @@ class PowerBIEmbedService:
         return token, expires_at, embed_url
 
     def _should_fallback_from_effective_identity(self, error: Exception) -> bool:
-        allow_fallback = os.getenv('POWERBI_RLS_FALLBACK_ON_IDENTITY_ERROR', 'true').strip().lower() in {
+        allow_fallback = os.getenv('POWERBI_RLS_FALLBACK_ON_IDENTITY_ERROR', 'false').strip().lower() in {
             '1',
             'true',
             'yes',

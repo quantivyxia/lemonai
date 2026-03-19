@@ -14,3 +14,11 @@ class AuditReadPermission(BasePermission):
 
         return request.method in ('GET', 'HEAD', 'OPTIONS')
 
+
+class SystemEventReadPermission(BasePermission):
+    def has_permission(self, request, view):
+        user = get_actor_user(request)
+        if not (user and user.is_authenticated):
+            return False
+        return is_super_admin(user) and request.method in ('GET', 'HEAD', 'OPTIONS')
+

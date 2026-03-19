@@ -168,6 +168,8 @@ class UserSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({'status': 'Status invalido.'})
 
         password = attrs.get('password')
+        if self.instance is None and not password:
+            raise serializers.ValidationError({'password': 'Senha obrigatoria para criar usuario.'})
         if password and (not password.isdigit() or len(password) != 6):
             raise serializers.ValidationError({'password': 'A senha deve conter exatamente 6 digitos numericos.'})
 
@@ -200,7 +202,7 @@ class UserSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        password = validated_data.pop('password', None) or '123456'
+        password = validated_data.pop('password')
         selected_groups = validated_data.pop('_selected_groups', [])
         selected_dashboards = validated_data.pop('_selected_dashboards', [])
         validated_data.pop('selected_group_ids', None)

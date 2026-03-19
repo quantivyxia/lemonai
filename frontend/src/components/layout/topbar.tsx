@@ -25,6 +25,7 @@ const mapPathToTitle: Record<string, string> = {
   '/permissions': 'Perfis e Permissoes',
   '/rls': 'Regras de RLS',
   '/audit': 'Auditoria',
+  '/monitoring': 'Monitoramento Global',
   '/settings/branding': 'White-label',
   '/settings/platform': 'Configuracoes',
 }
@@ -83,7 +84,7 @@ export const Topbar = ({ onMobileMenuOpen }: { onMobileMenuOpen: () => void }) =
               <DropdownMenuItem asChild>
                 <Link to="/settings/platform">Configuracoes</Link>
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={logout}>Sair</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => void logout()}>Sair</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

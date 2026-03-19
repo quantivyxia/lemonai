@@ -230,7 +230,8 @@ export const PowerBIPage = () => {
       return
     }
 
-    setSelectedWorkspaceId((current) => current || selectedConnection.defaultWorkspaceId || '')
+    setWorkspaceOptions([])
+    setSelectedWorkspaceId(selectedConnection.defaultWorkspaceId || '')
     setSelectedDatasetId('')
     setSelectedGatewayId('')
     setSelectedDatasourceId('')
@@ -424,17 +425,25 @@ export const PowerBIPage = () => {
     }
   }
 
-  const loadWorkspacesFromConnection = async () => {
-    if (!selectedConnectionId) {
+  const loadWorkspacesFromConnection = async (connectionId = selectedConnectionId) => {
+    if (!connectionId) {
       toast.error('Selecione uma conexao primeiro.')
       return
     }
 
     try {
-      const items = await platformApi.listPowerBIWorkspaces(selectedConnectionId)
+      const items = await platformApi.listPowerBIWorkspaces(connectionId)
       setWorkspaceOptions(items)
       if (items.length > 0) {
-        setSelectedWorkspaceId((current) => current || items[0].id)
+        const preferredWorkspaceId =
+          connections.find((connection) => connection.id === connectionId)?.defaultWorkspaceId || ''
+
+        const nextWorkspaceId =
+          items.find((workspace) => workspace.id === preferredWorkspaceId)?.id ?? items[0].id
+
+        setSelectedWorkspaceId(nextWorkspaceId)
+      } else {
+        setSelectedWorkspaceId('')
       }
       toast.success(`Workspaces carregados: ${items.length}`)
     } catch (error) {

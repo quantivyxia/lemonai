@@ -76,7 +76,7 @@ export const UsersTable = () => {
     status: 'active',
   })
 
-  const buildSuggestedPassword = (_tenantId: string) => {
+  const buildSuggestedPassword = () => {
     const randomDigits = Math.floor(100000 + Math.random() * 900000)
     return `${randomDigits}`
   }
@@ -163,7 +163,7 @@ export const UsersTable = () => {
       role: 'viewer',
       groupIds: [],
       dashboardIds: [],
-      password: buildSuggestedPassword(nextTenantId),
+      password: buildSuggestedPassword(),
       status: 'active',
     })
     setIsDialogOpen(true)
@@ -234,7 +234,7 @@ export const UsersTable = () => {
   }
 
   const refreshPasswordSuggestion = () => {
-    setForm((current) => ({ ...current, password: buildSuggestedPassword(current.tenantId) }))
+    setForm((current) => ({ ...current, password: buildSuggestedPassword() }))
   }
 
   const copyPasswordToClipboard = async () => {
@@ -326,7 +326,7 @@ export const UsersTable = () => {
             <Checkbox
               checked={checkedState}
               onCheckedChange={(checked) => {
-                const shouldCheck = Boolean(checked)
+                const shouldCheck = !!checked
                 setSelectedUserIds((current) =>
                   shouldCheck
                     ? [...new Set([...current, ...pageUserIds])]
@@ -342,7 +342,7 @@ export const UsersTable = () => {
             checked={selectedUserIds.includes(row.original.id)}
             onCheckedChange={(checked) =>
               setSelectedUserIds((current) =>
-                Boolean(checked)
+                checked === true
                   ? [...new Set([...current, row.original.id])]
                   : current.filter((id) => id !== row.original.id),
               )
@@ -588,7 +588,7 @@ export const UsersTable = () => {
                       tenantId: value,
                       groupIds: [],
                       dashboardIds: [],
-                      password: current.id ? current.password : buildSuggestedPassword(value),
+                      password: current.id ? current.password : buildSuggestedPassword(),
                     }))
                   }
                 >

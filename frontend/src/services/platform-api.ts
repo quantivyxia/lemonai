@@ -1,4 +1,5 @@
 import { apiList, apiRequest } from '@/services/api-client'
+import { appLogger } from '@/services/app-logger'
 import type {
   AccessLog,
   ActivityItem,
@@ -11,6 +12,8 @@ import type {
   PowerBIReportOption,
   PowerBIWorkspaceOption,
   RLSRule,
+  SystemEventLog,
+  SystemSummary,
   Tenant,
   TenantBranding,
   User,
@@ -27,12 +30,17 @@ type BackendTenant = {
   status: 'active' | 'inactive' | 'suspended'
   max_users?: number
   max_dashboards?: number
+  support_hours_total?: number | string
+  support_hours_consumed?: number | string
+  support_hours_remaining?: number | string
   users_count?: number
   dashboards_count?: number
   users_limit_reached?: boolean
   dashboards_limit_reached?: boolean
+  support_limit_reached?: boolean
   users_usage_percent?: number
   dashboards_usage_percent?: number
+  support_usage_percent?: number
   created_at: string
 }
 
@@ -272,10 +280,67 @@ type BootstrapPayload = {
   roleIds: Record<UserRole, string>
 }
 
-const safeList = async <T>(path: string): Promise<T[]> => {
+type BackendSystemEventLog = {
+  id: string
+  user_name: string | null
+  tenant_name: string | null
+  level: 'info' | 'warn' | 'error'
+  category: 'auth' | 'authorization' | 'admin' | 'integration' | 'system'
+  action: string
+  message: string
+  resource_type?: string
+  resource_id?: string
+  endpoint: string
+  method: string
+  request_id: string
+  ip_address?: string | null
+  status_code?: number | null
+  metadata?: Record<string, unknown>
+  created_at: string
+}
+
+type BackendSystemSummary = {
+  status: 'ok'
+  request_id: string
+  timestamp: string
+  counts: {
+    tenants: number
+    users: number
+    dashboards: number
+    workspaces: number
+    powerbi_connections: number
+    powerbi_gateways: number
+    access_logs: number
+    system_events: number
+  }
+  powerbi: {
+    active_connections: number
+    connections_with_error: number
+    gateways_with_error: number
+  }
+  recent: {
+    latest_system_event?: {
+      created_at: string
+      level: 'info' | 'warn' | 'error'
+      category: 'auth' | 'authorization' | 'admin' | 'integration' | 'system'
+      action: string
+    } | null
+    latest_access_log?: {
+      accessed_at: string
+      status: 'success' | 'denied' | 'error'
+      origin: 'portal' | 'api' | 'mobile'
+    } | null
+  }
+}
+
+const optionalList = async <T>(path: string): Promise<T[]> => {
   try {
     return await apiList<T>(path)
-  } catch {
+  } catch (error) {
+    appLogger.warn('Falha ao carregar recurso opcional', {
+      path,
+      error: error instanceof Error ? error.message : 'unknown',
+    })
     return []
   }
 }
@@ -329,6 +394,15 @@ const buildActivities = (logs: AccessLog[], dashboards: Dashboard[]): ActivityIt
 
 const normalizeTenantStatus = (status: BackendTenant['status']): Tenant['status'] =>
   status === 'active' ? 'active' : 'inactive'
+
+const toNumber = (value: number | string | null | undefined, fallback = 0) => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return fallback
+}
 
 const mapPowerBIConnection = (connection: BackendPowerBIConnection): PowerBIConnection => ({
   id: connection.id,
@@ -394,16 +468,16 @@ export const platformApi = {
       rlsRulesRaw,
       rolesRaw,
     ] = await Promise.all([
-      safeList<BackendTenant>('/tenants/'),
-      canReadUsers ? safeList<BackendUser>('/users/') : Promise.resolve([]),
-      safeList<BackendWorkspace>('/workspaces/'),
-      safeList<BackendDashboard>('/dashboards/'),
-      safeList<BackendDashboardColumn>('/dashboards/columns/'),
-      safeList<BackendGroup>('/users/groups/'),
-      canReadAudit ? safeList<BackendAccessLog>('/audit/logs/') : Promise.resolve([]),
-      safeList<BackendBranding>('/branding/'),
-      canReadRLS ? safeList<BackendRLSRule>('/permissions/rls-rules/') : Promise.resolve([]),
-      canReadRoles ? safeList<BackendRole>('/permissions/roles/') : Promise.resolve([]),
+      apiList<BackendTenant>('/tenants/'),
+      canReadUsers ? apiList<BackendUser>('/users/') : Promise.resolve([]),
+      apiList<BackendWorkspace>('/workspaces/'),
+      apiList<BackendDashboard>('/dashboards/'),
+      optionalList<BackendDashboardColumn>('/dashboards/columns/'),
+      optionalList<BackendGroup>('/users/groups/'),
+      canReadAudit ? optionalList<BackendAccessLog>('/audit/logs/') : Promise.resolve([]),
+      apiList<BackendBranding>('/branding/'),
+      canReadRLS ? optionalList<BackendRLSRule>('/permissions/rls-rules/') : Promise.resolve([]),
+      canReadRoles ? optionalList<BackendRole>('/permissions/roles/') : Promise.resolve([]),
     ])
 
     const tenantById = new Map<string, string>()
@@ -417,16 +491,36 @@ export const platformApi = {
         dashboardsCount: tenant.dashboards_count ?? 0,
         maxUsers: tenant.max_users ?? 25,
         maxDashboards: tenant.max_dashboards ?? 20,
+        supportHoursTotal: toNumber(tenant.support_hours_total, 0),
+        supportHoursConsumed: toNumber(tenant.support_hours_consumed, 0),
+        supportHoursRemaining: toNumber(tenant.support_hours_remaining, 0),
         usersLimitReached:
           tenant.users_limit_reached ?? (tenant.users_count ?? 0) >= (tenant.max_users ?? 25),
         dashboardsLimitReached:
           tenant.dashboards_limit_reached ?? (tenant.dashboards_count ?? 0) >= (tenant.max_dashboards ?? 20),
+        supportLimitReached:
+          tenant.support_limit_reached ??
+          (toNumber(tenant.support_hours_total, 0) > 0
+            ? toNumber(tenant.support_hours_consumed, 0) >= toNumber(tenant.support_hours_total, 0)
+            : toNumber(tenant.support_hours_consumed, 0) > 0),
         usersUsagePercent:
           tenant.users_usage_percent ??
           Math.min(999, Math.round(((tenant.users_count ?? 0) / Math.max(tenant.max_users ?? 25, 1)) * 100)),
         dashboardsUsagePercent:
           tenant.dashboards_usage_percent ??
           Math.min(999, Math.round(((tenant.dashboards_count ?? 0) / Math.max(tenant.max_dashboards ?? 20, 1)) * 100)),
+        supportUsagePercent:
+          tenant.support_usage_percent ??
+          (toNumber(tenant.support_hours_total, 0) > 0
+            ? Math.min(
+                999,
+                Math.round(
+                  (toNumber(tenant.support_hours_consumed, 0) /
+                    Math.max(toNumber(tenant.support_hours_total, 0), 1)) *
+                    100,
+                ),
+              )
+            : 0),
         brandingConfigured: false,
         createdAt: tenant.created_at,
       }
@@ -871,6 +965,62 @@ export const platformApi = {
   async listPowerBIGatewayDatasources() {
     const payload = await apiList<BackendPowerBIGatewayDatasource>('/powerbi/datasources/')
     return payload.map(mapPowerBIGatewayDatasource)
+  },
+
+  async getSystemSummary() {
+    const payload = await apiRequest<BackendSystemSummary>('/health/summary/')
+    const result: SystemSummary = {
+      status: payload.status,
+      requestId: payload.request_id,
+      timestamp: payload.timestamp,
+      counts: {
+        tenants: payload.counts.tenants,
+        users: payload.counts.users,
+        dashboards: payload.counts.dashboards,
+        workspaces: payload.counts.workspaces,
+        powerbiConnections: payload.counts.powerbi_connections,
+        powerbiGateways: payload.counts.powerbi_gateways,
+        accessLogs: payload.counts.access_logs,
+        systemEvents: payload.counts.system_events,
+      },
+      powerbi: {
+        activeConnections: payload.powerbi.active_connections,
+        connectionsWithError: payload.powerbi.connections_with_error,
+        gatewaysWithError: payload.powerbi.gateways_with_error,
+      },
+      recent: {
+        latestSystemEvent: payload.recent.latest_system_event ?? null,
+        latestAccessLog: payload.recent.latest_access_log ?? null,
+      },
+    }
+    return result
+  },
+
+  async listSystemEvents(filters?: { level?: string; category?: string; search?: string }) {
+    const params = new URLSearchParams({ page_size: '100' })
+    if (filters?.level) params.set('level', filters.level)
+    if (filters?.category) params.set('category', filters.category)
+    if (filters?.search) params.set('search', filters.search)
+
+    const payload = await apiList<BackendSystemEventLog>(`/audit/system-events/?${params.toString()}`)
+    return payload.map<SystemEventLog>((event) => ({
+      id: event.id,
+      userName: event.user_name ?? 'Sistema',
+      tenantName: event.tenant_name ?? 'Global',
+      level: event.level,
+      category: event.category,
+      action: event.action,
+      message: event.message,
+      resourceType: event.resource_type,
+      resourceId: event.resource_id,
+      endpoint: event.endpoint,
+      method: event.method,
+      requestId: event.request_id,
+      ipAddress: event.ip_address ?? undefined,
+      statusCode: event.status_code ?? undefined,
+      metadata: event.metadata ?? {},
+      createdAt: event.created_at,
+    }))
   },
 }
 

@@ -1,7 +1,9 @@
-﻿import { sessionStorageService } from '@/services/session-storage'
+import { appLogger } from '@/services/app-logger'
+import { sessionStorageService } from '@/services/session-storage'
 
 const baseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, '')
 const API_BASE_URL = baseUrl ?? 'http://127.0.0.1:8000/api'
+const API_TIMEOUT_MS = Number(import.meta.env.VITE_API_TIMEOUT_MS ?? 20000)
 
 type RequestOptions = {
   auth?: boolean
@@ -14,6 +16,7 @@ const buildUrl = (path: string) => {
 }
 
 const NETWORK_ERROR_MESSAGE = `Nao foi possivel conectar com a API (${API_BASE_URL}). Verifique se o backend esta em execucao.`
+const TIMEOUT_ERROR_MESSAGE = `Tempo limite excedido ao chamar a API (${API_TIMEOUT_MS} ms).`
 const VIEW_AS_HEADER = 'X-InsightHub-View-As-User'
 const VIEW_AS_READ_ONLY_MESSAGE = 'Modo "Ver tela do usuario" permite apenas visualizacao. Alteracoes estao bloqueadas.'
 const INVALID_VIEW_AS_MESSAGES = [
@@ -32,20 +35,37 @@ const parseBody = async (response: Response) => {
   }
 }
 
-const resolveErrorMessage = (payload: unknown, fallback: string) => {
+const withRequestId = (message: string, payload: unknown) => {
+  if (!payload || typeof payload !== 'object') return message
+  const requestId = (payload as { request_id?: unknown }).request_id
+  return typeof requestId === 'string' && requestId.trim()
+    ? `${message} (request_id: ${requestId})`
+    : message
+}
+
+const statusFallbackMessage = (status: number) => {
+  if (status === 401) return 'Sessao expirada ou invalida. Faca login novamente.'
+  if (status === 403) return 'Voce nao tem permissao para executar essa acao.'
+  if (status === 404) return 'Recurso nao encontrado.'
+  if (status >= 500) return 'Erro interno do servidor.'
+  return `Erro na requisicao (${status})`
+}
+
+const resolveErrorMessage = (payload: unknown, status: number) => {
+  const fallback = statusFallbackMessage(status)
   if (!payload) return fallback
   if (typeof payload === 'string') return payload
   if (typeof payload !== 'object') return fallback
 
   const maybeDetail = (payload as { detail?: unknown }).detail
-  if (typeof maybeDetail === 'string') return maybeDetail
+  if (typeof maybeDetail === 'string') return withRequestId(maybeDetail, payload)
 
   const firstEntry = Object.entries(payload as Record<string, unknown>)[0]
-  if (!firstEntry) return fallback
+  if (!firstEntry) return withRequestId(fallback, payload)
   const [, value] = firstEntry
-  if (Array.isArray(value) && typeof value[0] === 'string') return value[0]
-  if (typeof value === 'string') return value
-  return fallback
+  if (Array.isArray(value) && typeof value[0] === 'string') return withRequestId(value[0], payload)
+  if (typeof value === 'string') return withRequestId(value, payload)
+  return withRequestId(fallback, payload)
 }
 
 const isInvalidViewAsPayload = (payload: unknown) => {
@@ -54,13 +74,28 @@ const isInvalidViewAsPayload = (payload: unknown) => {
   return typeof detail === 'string' && INVALID_VIEW_AS_MESSAGES.includes(detail)
 }
 
+const fetchWithTimeout = async (url: string, init: RequestInit) => {
+  const controller = new AbortController()
+  const timeoutId = window.setTimeout(() => controller.abort(), API_TIMEOUT_MS)
+  try {
+    return await fetch(url, { ...init, signal: controller.signal })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error(TIMEOUT_ERROR_MESSAGE)
+    }
+    throw error
+  } finally {
+    window.clearTimeout(timeoutId)
+  }
+}
+
 const refreshAccessToken = async () => {
   const refresh = sessionStorageService.getRefreshToken()
   if (!refresh) return null
 
   let response: Response
   try {
-    response = await fetch(buildUrl('/authentication/refresh/'), {
+    response = await fetchWithTimeout(buildUrl('/authentication/refresh/'), {
       method: 'POST',
       headers: {
         Accept: 'application/json',
@@ -68,8 +103,11 @@ const refreshAccessToken = async () => {
       },
       body: JSON.stringify({ refresh }),
     })
-  } catch {
+  } catch (error) {
     sessionStorageService.clear()
+    appLogger.warn('Falha ao renovar access token', {
+      error: error instanceof Error ? error.message : 'unknown',
+    })
     return null
   }
 
@@ -96,6 +134,8 @@ export const apiRequest = async <T>(
 ): Promise<T> => {
   const auth = options.auth ?? true
   const retryOnAuthError = options.retryOnAuthError ?? true
+  const method = (init.method ?? 'GET').toUpperCase()
+  const url = buildUrl(path)
 
   const headers = new Headers(init.headers)
   headers.set('Accept', 'application/json')
@@ -107,7 +147,6 @@ export const apiRequest = async <T>(
   if (token) headers.set('Authorization', `Bearer ${token}`)
   const isAuthenticationRoute = path.startsWith('/authentication/')
   const viewAsUser = !isAuthenticationRoute ? sessionStorageService.getViewAsSession() : null
-  const method = (init.method ?? 'GET').toUpperCase()
   const isSafeMethod = method === 'GET' || method === 'HEAD' || method === 'OPTIONS'
 
   if (viewAsUser?.id && !isSafeMethod) {
@@ -120,9 +159,11 @@ export const apiRequest = async <T>(
 
   let response: Response
   try {
-    response = await fetch(buildUrl(path), { ...init, headers })
-  } catch {
-    throw new Error(NETWORK_ERROR_MESSAGE)
+    response = await fetchWithTimeout(url, { ...init, headers })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : NETWORK_ERROR_MESSAGE
+    appLogger.error('Falha de comunicacao com API', { path, method, error: message })
+    throw new Error(message === TIMEOUT_ERROR_MESSAGE ? message : NETWORK_ERROR_MESSAGE)
   }
 
   if (response.status === 401 && auth && retryOnAuthError) {
@@ -131,13 +172,21 @@ export const apiRequest = async <T>(
       headers.set('Authorization', `Bearer ${refreshedToken}`)
       let retryResponse: Response
       try {
-        retryResponse = await fetch(buildUrl(path), { ...init, headers })
-      } catch {
-        throw new Error(NETWORK_ERROR_MESSAGE)
+        retryResponse = await fetchWithTimeout(url, { ...init, headers })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : NETWORK_ERROR_MESSAGE
+        throw new Error(message === TIMEOUT_ERROR_MESSAGE ? message : NETWORK_ERROR_MESSAGE)
       }
       const retryPayload = await parseBody(retryResponse)
       if (!retryResponse.ok) {
-        throw new Error(resolveErrorMessage(retryPayload, `Erro na requisicao (${retryResponse.status})`))
+        const message = resolveErrorMessage(retryPayload, retryResponse.status)
+        appLogger.warn('Requisicao falhou apos refresh de token', {
+          path,
+          method,
+          status: retryResponse.status,
+          message,
+        })
+        throw new Error(message)
       }
       return retryPayload as T
     }
@@ -151,21 +200,29 @@ export const apiRequest = async <T>(
 
     let retryResponse: Response
     try {
-      retryResponse = await fetch(buildUrl(path), { ...init, headers })
-    } catch {
-      throw new Error(NETWORK_ERROR_MESSAGE)
+      retryResponse = await fetchWithTimeout(url, { ...init, headers })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : NETWORK_ERROR_MESSAGE
+      throw new Error(message === TIMEOUT_ERROR_MESSAGE ? message : NETWORK_ERROR_MESSAGE)
     }
 
     const retryPayload = await parseBody(retryResponse)
     if (!retryResponse.ok) {
-      throw new Error(resolveErrorMessage(retryPayload, `Erro na requisicao (${retryResponse.status})`))
+      throw new Error(resolveErrorMessage(retryPayload, retryResponse.status))
     }
 
     return retryPayload as T
   }
 
   if (!response.ok) {
-    throw new Error(resolveErrorMessage(payload, `Erro na requisicao (${response.status})`))
+    const message = resolveErrorMessage(payload, response.status)
+    appLogger.warn('API retornou erro', {
+      path,
+      method,
+      status: response.status,
+      message,
+    })
+    throw new Error(message)
   }
 
   return payload as T
@@ -182,4 +239,3 @@ export const apiList = async <T>(path: string): Promise<T[]> => {
 
   return []
 }
-

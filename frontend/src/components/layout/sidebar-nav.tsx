@@ -4,6 +4,7 @@ import {
   Compass,
   DatabaseZap,
   FileText,
+  ActivitySquare,
   LayoutDashboard,
   Palette,
   ShieldAlert,
@@ -37,6 +38,7 @@ const mainNav: NavItem[] = [
   },
   { label: 'Tenants', path: '/tenants', icon: Building2, roles: ['super_admin', 'analyst'] },
   { label: 'Auditoria', path: '/audit', icon: FileText, roles: ['super_admin', 'analyst'] },
+  { label: 'Monitoramento', path: '/monitoring', icon: ActivitySquare, roles: ['super_admin'] },
 ]
 
 const secondaryNav: NavItem[] = [

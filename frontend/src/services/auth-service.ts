@@ -67,17 +67,35 @@ export const authService = {
       { auth: false, retryOnAuthError: false },
     )
 
-    sessionStorageService.setTokens({
-      access: payload.access,
-      refresh: payload.refresh,
-    })
+    sessionStorageService.setTokens(
+      {
+        access: payload.access,
+        refresh: payload.refresh,
+      },
+      input.remember,
+    )
 
     const session = mapBackendUserToSession(payload.user)
-    sessionStorageService.setSession(session)
+    sessionStorageService.setSession(session, input.remember)
     return session
   },
 
-  logout() {
+  async logout() {
+    const refresh = sessionStorageService.getRefreshToken()
+    if (refresh) {
+      try {
+        await apiRequest(
+          '/authentication/logout/',
+          {
+            method: 'POST',
+            body: JSON.stringify({ refresh }),
+          },
+          { retryOnAuthError: false },
+        )
+      } catch {
+        // A limpeza local continua sendo obrigatoria mesmo se o backend falhar.
+      }
+    }
     sessionStorageService.clear()
   },
 }

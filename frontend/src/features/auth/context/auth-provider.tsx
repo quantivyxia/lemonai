@@ -18,7 +18,7 @@ type AuthContextValue = {
   isLoading: boolean
   isViewAsMode: boolean
   login: (input: LoginInput) => Promise<void>
-  logout: () => void
+  logout: () => Promise<void>
   startViewAs: (user: ViewAsSession) => void
   stopViewAs: () => void
 }
@@ -75,8 +75,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setViewAsUser(null)
   }
 
-  const logout = () => {
-    authService.logout()
+  const logout = async () => {
+    await authService.logout()
     setActorUser(null)
     setViewAsUser(null)
   }

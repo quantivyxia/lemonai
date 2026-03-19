@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import time
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -15,6 +16,8 @@ from apps.powerbi.models import (
     PowerBIGateway,
     PowerBIGatewayDataSource,
 )
+
+logger = logging.getLogger('insighthub.integration.powerbi')
 
 
 class PowerBIServiceError(Exception):
@@ -87,6 +90,15 @@ class PowerBIClient:
         }
         response = requests.post(self._token_endpoint(), data=payload, timeout=self.timeout_seconds)
         if response.status_code >= 400:
+            logger.warning(
+                'Power BI token request failed',
+                extra={
+                    'status_code': response.status_code,
+                    'tenant_id': str(self.connection.tenant_id),
+                    'event_category': 'integration',
+                    'event_action': 'powerbi.token.failed',
+                },
+            )
             raise PowerBIServiceError(self._parse_error(response))
 
         data = response.json()
@@ -100,6 +112,14 @@ class PowerBIClient:
             expires_at=now + timedelta(seconds=expires_in),
         )
         self._token = token
+        logger.info(
+            'Power BI token obtained',
+            extra={
+                'tenant_id': str(self.connection.tenant_id),
+                'event_category': 'integration',
+                'event_action': 'powerbi.token.success',
+            },
+        )
         return token
 
     def _request(self, method: str, path: str, params: dict | None = None, payload: dict | None = None):
@@ -118,10 +138,32 @@ class PowerBIClient:
             timeout=self.timeout_seconds,
         )
         if response.status_code >= 400:
+            logger.warning(
+                'Power BI API request failed',
+                extra={
+                    'method': method.upper(),
+                    'path': url,
+                    'status_code': response.status_code,
+                    'tenant_id': str(self.connection.tenant_id),
+                    'event_category': 'integration',
+                    'event_action': 'powerbi.request.failed',
+                },
+            )
             raise PowerBIServiceError(self._parse_error(response))
 
         if response.status_code == 204 or not response.text:
             return {}
+        logger.info(
+            'Power BI API request succeeded',
+            extra={
+                'method': method.upper(),
+                'path': url,
+                'status_code': response.status_code,
+                'tenant_id': str(self.connection.tenant_id),
+                'event_category': 'integration',
+                'event_action': 'powerbi.request.success',
+            },
+        )
         return response.json()
 
     def list_workspaces(self):

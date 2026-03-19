@@ -1,4 +1,5 @@
 import { createContext, useCallback, useEffect, useMemo, useState } from 'react'
+import { toast } from 'sonner'
 
 import { useAuth } from '@/hooks/use-auth'
 import { permissionMatrixMock } from '@/mocks/platform'
@@ -22,6 +23,7 @@ import type {
 
 type PlatformStoreValue = {
   isLoading: boolean
+  loadError: string | null
   tenants: Tenant[]
   users: User[]
   dashboards: Dashboard[]
@@ -42,10 +44,13 @@ type PlatformStoreValue = {
       | 'id'
       | 'usersCount'
       | 'dashboardsCount'
+      | 'supportHoursRemaining'
       | 'usersLimitReached'
       | 'dashboardsLimitReached'
+      | 'supportLimitReached'
       | 'usersUsagePercent'
       | 'dashboardsUsagePercent'
+      | 'supportUsagePercent'
       | 'brandingConfigured'
     > & { id?: string },
   ) => Promise<void>
@@ -105,9 +110,10 @@ const initialState: PersistedState = {
 export const PlatformStoreContext = createContext<PlatformStoreValue | undefined>(undefined)
 
 export const PlatformStoreProvider = ({ children }: { children: React.ReactNode }) => {
-  const { isAuthenticated, isViewAsMode, user } = useAuth()
+  const { isAuthenticated, user } = useAuth()
   const [state, setState] = useState<PersistedState>(initialState)
   const [isLoading, setIsLoading] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [roleIds, setRoleIds] = useState<Record<UserRole, string>>({
     super_admin: '',
     analyst: '',
@@ -126,12 +132,14 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
         analyst: '',
         viewer: '',
       })
+      setLoadError(null)
       return
     }
 
     setIsLoading(true)
     try {
       const data = await platformApi.fetchBootstrap({ userRole: user?.role })
+      setLoadError(null)
       setState((current) => ({
         ...current,
         tenants: data.tenants,
@@ -147,10 +155,14 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
         accessSeries: data.accessSeries,
       }))
       setRoleIds(data.roleIds)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Nao foi possivel carregar os dados da plataforma.'
+      setLoadError(message)
+      toast.error(message)
     } finally {
       setIsLoading(false)
     }
-  }, [isAuthenticated, isViewAsMode, user?.id, user?.role, user?.tenantId])
+  }, [isAuthenticated, user?.role])
 
   useEffect(() => {
     void reloadData()
@@ -164,6 +176,8 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
         status: tenant.status,
         max_users: tenant.maxUsers,
         max_dashboards: tenant.maxDashboards,
+        support_hours_total: tenant.supportHoursTotal,
+        support_hours_consumed: tenant.supportHoursConsumed,
       })
       await reloadData()
     },
@@ -406,6 +420,7 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
   const value = useMemo<PlatformStoreValue>(
     () => ({
       isLoading,
+      loadError,
       tenants: state.tenants,
       users: state.users,
       dashboards: state.dashboards,
@@ -441,6 +456,7 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
     }),
     [
       isLoading,
+      loadError,
       reloadData,
       state.accessLogs,
       state.accessSeries,

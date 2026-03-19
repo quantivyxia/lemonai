@@ -3,9 +3,11 @@ import { createBrowserRouter } from 'react-router-dom'
 import { AuditPage } from '@/features/audit/pages/audit-page'
 import { LoginPage } from '@/features/auth/pages/login-page'
 import { NotFoundPage } from '@/features/common/pages/not-found-page'
+import { RouteErrorPage } from '@/features/common/pages/route-error-page'
 import { DashboardHomePage } from '@/features/dashboard/pages/dashboard-home-page'
 import { DashboardsPage } from '@/features/dashboards/pages/dashboards-page'
 import { GroupsPage } from '@/features/groups/pages/groups-page'
+import { SystemMonitoringPage } from '@/features/monitoring/pages/system-monitoring-page'
 import { PermissionsPage } from '@/features/permissions/pages/permissions-page'
 import { PowerBIPage } from '@/features/powerbi/pages/powerbi-page'
 import { RLSRulesPage } from '@/features/rls/pages/rls-rules-page'
@@ -26,6 +28,7 @@ export const appRouter = createBrowserRouter([
   {
     path: '/auth',
     element: <AuthLayout />,
+    errorElement: <RouteErrorPage />,
     children: [
       {
         path: 'login',
@@ -36,6 +39,7 @@ export const appRouter = createBrowserRouter([
   {
     path: '/',
     element: <ProtectedRoute />,
+    errorElement: <RouteErrorPage />,
     children: [
       {
         element: <AppShell />,
@@ -85,6 +89,14 @@ export const appRouter = createBrowserRouter([
             element: (
               <RoleRoute allowedRoles={[...nonViewerRoles]}>
                 <AuditPage />
+              </RoleRoute>
+            ),
+          },
+          {
+            path: 'monitoring',
+            element: (
+              <RoleRoute allowedRoles={['super_admin']}>
+                <SystemMonitoringPage />
               </RoleRoute>
             ),
           },

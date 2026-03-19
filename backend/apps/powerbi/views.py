@@ -29,6 +29,31 @@ class PowerBIConnectionViewSet(viewsets.ModelViewSet):
     ordering = ['tenant__name']
     supported_name_conflicts = {'Abort', 'Ignore', 'Overwrite', 'CreateOrOverwrite'}
 
+    def _filter_connection_workspaces(self, connection, workspaces):
+        default_workspace_id = str(connection.default_workspace_id or '').strip()
+        if not default_workspace_id:
+            return workspaces
+        return [
+            workspace
+            for workspace in workspaces
+            if str(workspace.get('id') or '').strip() == default_workspace_id
+        ]
+
+    def _ensure_workspace_allowed(self, connection, workspace_id):
+        default_workspace_id = str(connection.default_workspace_id or '').strip()
+        workspace_id = str(workspace_id or '').strip()
+        if default_workspace_id and workspace_id != default_workspace_id:
+            return Response(
+                {
+                    'detail': (
+                        'Esta conexao esta restrita ao workspace padrao configurado. '
+                        'Atualize o Default workspace ID da conexao para operar em outro workspace.'
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return None
+
     def get_queryset(self):
         queryset = PowerBIConnection.objects.select_related('tenant')
         return apply_tenant_scope(queryset, self.request.user)
@@ -45,7 +70,7 @@ class PowerBIConnectionViewSet(viewsets.ModelViewSet):
         client = PowerBIClient(connection)
 
         try:
-            workspaces = client.list_workspaces()
+            workspaces = self._filter_connection_workspaces(connection, client.list_workspaces())
             connection.last_tested_at = timezone.now()
             connection.last_error = ''
             connection.save(update_fields=['last_tested_at', 'last_error', 'updated_at'])
@@ -66,7 +91,7 @@ class PowerBIConnectionViewSet(viewsets.ModelViewSet):
         connection = self.get_object()
         client = PowerBIClient(connection)
         try:
-            workspaces = client.list_workspaces()
+            workspaces = self._filter_connection_workspaces(connection, client.list_workspaces())
             result = [
                 {
                     'id': workspace.get('id'),
@@ -86,6 +111,9 @@ class PowerBIConnectionViewSet(viewsets.ModelViewSet):
         workspace_id = request.query_params.get('workspace_id')
         if not workspace_id:
             return Response({'detail': 'workspace_id e obrigatorio.'}, status=status.HTTP_400_BAD_REQUEST)
+        denied_response = self._ensure_workspace_allowed(connection, workspace_id)
+        if denied_response:
+            return denied_response
 
         client = PowerBIClient(connection)
         try:
@@ -110,6 +138,9 @@ class PowerBIConnectionViewSet(viewsets.ModelViewSet):
         workspace_id = request.query_params.get('workspace_id')
         if not workspace_id:
             return Response({'detail': 'workspace_id e obrigatorio.'}, status=status.HTTP_400_BAD_REQUEST)
+        denied_response = self._ensure_workspace_allowed(connection, workspace_id)
+        if denied_response:
+            return denied_response
 
         client = PowerBIClient(connection)
         try:
@@ -133,7 +164,7 @@ class PowerBIConnectionViewSet(viewsets.ModelViewSet):
         client = PowerBIClient(connection)
 
         try:
-            workspaces = client.list_workspaces()
+            workspaces = self._filter_connection_workspaces(connection, client.list_workspaces())
             synced = 0
             for workspace in workspaces:
                 external_id = str(workspace.get('id', ''))
@@ -164,13 +195,16 @@ class PowerBIConnectionViewSet(viewsets.ModelViewSet):
         workspace_id = request.data.get('workspace_id')
         if not workspace_id:
             return Response({'detail': 'workspace_id e obrigatorio.'}, status=status.HTTP_400_BAD_REQUEST)
+        denied_response = self._ensure_workspace_allowed(connection, workspace_id)
+        if denied_response:
+            return denied_response
 
         category = request.data.get('category', 'Operacional')
         status_value = request.data.get('status', DashboardStatus.DRAFT)
         client = PowerBIClient(connection)
 
         try:
-            workspace_response = client.list_workspaces()
+            workspace_response = self._filter_connection_workspaces(connection, client.list_workspaces())
             workspace_name = next(
                 (workspace.get('name') for workspace in workspace_response if str(workspace.get('id')) == workspace_id),
                 'Workspace importado',
@@ -261,6 +295,9 @@ class PowerBIConnectionViewSet(viewsets.ModelViewSet):
         workspace_id = str(request.data.get('workspace_id') or connection.default_workspace_id or '').strip()
         if not workspace_id:
             return Response({'detail': 'workspace_id e obrigatorio.'}, status=status.HTTP_400_BAD_REQUEST)
+        denied_response = self._ensure_workspace_allowed(connection, workspace_id)
+        if denied_response:
+            return denied_response
 
         pbix_file = request.FILES.get('pbix_file') or request.FILES.get('file')
         if not pbix_file:
@@ -301,7 +338,7 @@ class PowerBIConnectionViewSet(viewsets.ModelViewSet):
 
         client = PowerBIClient(connection)
         try:
-            workspace_response = client.list_workspaces()
+            workspace_response = self._filter_connection_workspaces(connection, client.list_workspaces())
             workspace_name = next(
                 (workspace.get('name') for workspace in workspace_response if str(workspace.get('id')) == workspace_id),
                 'Workspace importado',

@@ -1,11 +1,10 @@
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { accessSeries } from '@/mocks/analytics'
 import type { AccessSeriesPoint } from '@/types/entities'
 
 export const AccessChartCard = ({ data }: { data?: AccessSeriesPoint[] }) => {
-  const chartData = data ?? accessSeries
+  const chartData = data ?? []
 
   return (
     <Card className="h-full">
