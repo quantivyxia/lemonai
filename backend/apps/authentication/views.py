@@ -1,3 +1,5 @@
+import logging
+
 from rest_framework import serializers, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -7,6 +9,15 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from apps.audit.services import create_system_event
 from apps.authentication.serializers import InsightHubTokenObtainPairSerializer, MeSerializer
+
+logger = logging.getLogger('insighthub.api')
+
+
+def safe_create_system_event(**kwargs):
+    try:
+        create_system_event(**kwargs)
+    except Exception:  # noqa: BLE001
+        logger.exception('Failed to persist authentication system event')
 
 
 class LoginView(TokenObtainPairView):
@@ -18,7 +29,7 @@ class LoginView(TokenObtainPairView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.user
-        create_system_event(
+        safe_create_system_event(
             level='info',
             category='auth',
             action='auth.login',
@@ -52,7 +63,7 @@ class LogoutView(APIView):
         except TokenError as exc:
             raise serializers.ValidationError({'refresh': 'Refresh token invalido ou expirado.'}) from exc
 
-        create_system_event(
+        safe_create_system_event(
             level='info',
             category='auth',
             action='auth.logout',
