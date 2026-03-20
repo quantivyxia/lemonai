@@ -404,6 +404,48 @@ const toNumber = (value: number | string | null | undefined, fallback = 0) => {
   return fallback
 }
 
+const mapTenant = (tenant: BackendTenant, options?: { brandingTenantIds?: Set<string> }): Tenant => ({
+  id: tenant.id,
+  name: tenant.name,
+  status: normalizeTenantStatus(tenant.status),
+  usersCount: tenant.users_count ?? 0,
+  dashboardsCount: tenant.dashboards_count ?? 0,
+  maxUsers: tenant.max_users ?? 25,
+  maxDashboards: tenant.max_dashboards ?? 20,
+  supportHoursTotal: toNumber(tenant.support_hours_total, 0),
+  supportHoursConsumed: toNumber(tenant.support_hours_consumed, 0),
+  supportHoursRemaining: toNumber(tenant.support_hours_remaining, 0),
+  usersLimitReached:
+    tenant.users_limit_reached ?? (tenant.users_count ?? 0) >= (tenant.max_users ?? 25),
+  dashboardsLimitReached:
+    tenant.dashboards_limit_reached ?? (tenant.dashboards_count ?? 0) >= (tenant.max_dashboards ?? 20),
+  supportLimitReached:
+    tenant.support_limit_reached ??
+    (toNumber(tenant.support_hours_total, 0) > 0
+      ? toNumber(tenant.support_hours_consumed, 0) >= toNumber(tenant.support_hours_total, 0)
+      : toNumber(tenant.support_hours_consumed, 0) > 0),
+  usersUsagePercent:
+    tenant.users_usage_percent ??
+    Math.min(999, Math.round(((tenant.users_count ?? 0) / Math.max(tenant.max_users ?? 25, 1)) * 100)),
+  dashboardsUsagePercent:
+    tenant.dashboards_usage_percent ??
+    Math.min(999, Math.round(((tenant.dashboards_count ?? 0) / Math.max(tenant.max_dashboards ?? 20, 1)) * 100)),
+  supportUsagePercent:
+    tenant.support_usage_percent ??
+    (toNumber(tenant.support_hours_total, 0) > 0
+      ? Math.min(
+          999,
+          Math.round(
+            (toNumber(tenant.support_hours_consumed, 0) /
+              Math.max(toNumber(tenant.support_hours_total, 0), 1)) *
+              100,
+          ),
+        )
+      : 0),
+  brandingConfigured: options?.brandingTenantIds?.has(tenant.id) ?? false,
+  createdAt: tenant.created_at,
+})
+
 const mapUser = (user: BackendUser): User => ({
   id: user.id,
   firstName: user.first_name,
@@ -419,6 +461,87 @@ const mapUser = (user: BackendUser): User => ({
   status: user.status,
   lastAccessAt: user.last_login ?? new Date().toISOString(),
   avatarUrl: user.avatar_url,
+})
+
+const mapWorkspace = (workspace: BackendWorkspace): Workspace => ({
+  id: workspace.id,
+  tenantId: workspace.tenant,
+  tenantName: workspace.tenant_name,
+  name: workspace.name,
+  externalWorkspaceId: workspace.external_workspace_id,
+  status: workspace.status,
+  lastSyncAt: workspace.last_sync_at ?? new Date().toISOString(),
+  dashboardsCount: workspace.dashboards_count ?? 0,
+})
+
+const mapDashboard = (dashboard: BackendDashboard, currentById?: Map<string, Dashboard>): Dashboard => ({
+  id: dashboard.id,
+  tenantId: dashboard.tenant,
+  tenantName: dashboard.tenant_name,
+  name: dashboard.name,
+  workspace: dashboard.workspace_name,
+  category: dashboard.category,
+  status: dashboard.status,
+  updatedAt: dashboard.updated_at,
+  views7d: currentById?.get(dashboard.id)?.views7d ?? 0,
+  description: dashboard.description,
+  workspaceId: dashboard.workspace,
+  reportId: dashboard.report_id,
+  datasetId: dashboard.dataset_id,
+  embedUrl: dashboard.embed_url,
+  refreshSchedule: dashboard.refresh_schedule ?? '',
+  tags: dashboard.tags ?? [],
+})
+
+const mapGroup = (
+  group: BackendGroup,
+  options?: {
+    userNameById?: Map<string, string>
+    dashboardNameById?: Map<string, string>
+    tenantNameById?: Map<string, string>
+  },
+): UserGroup => ({
+  id: group.id,
+  tenantId: group.tenant,
+  tenantName: options?.tenantNameById?.get(group.tenant) ?? 'Tenant',
+  name: group.name,
+  description: group.description,
+  users:
+    group.member_names && group.member_names.length > 0
+      ? group.member_names
+      : group.members.map((memberId) => options?.userNameById?.get(memberId) ?? memberId),
+  dashboards:
+    group.dashboard_names && group.dashboard_names.length > 0
+      ? group.dashboard_names
+      : group.dashboards.map((dashboardId) => options?.dashboardNameById?.get(dashboardId) ?? dashboardId),
+})
+
+const mapBranding = (branding: BackendBranding): TenantBranding => ({
+  id: branding.id,
+  tenantId: branding.tenant,
+  tenantName: branding.tenant_name,
+  platformName: branding.platform_name,
+  primaryColor: branding.primary_color,
+  secondaryColor: branding.secondary_color,
+  domain: branding.domain,
+  logoUrl: branding.logo_url,
+  faviconUrl: branding.favicon_url,
+})
+
+const mapRLSRule = (rule: BackendRLSRule): RLSRule => ({
+  id: rule.id,
+  tenantId: rule.tenant,
+  dashboardId: rule.dashboard,
+  userId: rule.user,
+  tableName: rule.table_name ?? '',
+  columnName: rule.column_name,
+  operator: rule.operator ?? (rule.rule_type === 'deny' ? 'not_in' : 'in'),
+  ruleType: rule.rule_type,
+  values: rule.values,
+  notes: rule.notes,
+  isActive: rule.is_active,
+  createdAt: rule.created_at,
+  updatedAt: rule.updated_at,
 })
 
 const mapPowerBIConnection = (connection: BackendPowerBIConnection): PowerBIConnection => ({
@@ -466,9 +589,44 @@ const mapPowerBIGatewayDatasource = (
 })
 
 export const platformApi = {
+  async fetchTenants(options?: { brandings?: TenantBranding[] }): Promise<Tenant[]> {
+    const payload = await apiList<BackendTenant>('/tenants/')
+    const brandingTenantIds = new Set((options?.brandings ?? []).map((branding) => branding.tenantId))
+    return payload.map((tenant) => mapTenant(tenant, { brandingTenantIds }))
+  },
+
   async fetchUsers(): Promise<User[]> {
     const usersRaw = await apiList<BackendUser>('/users/')
     return usersRaw.map(mapUser)
+  },
+
+  async fetchDashboards(options?: { currentDashboards?: Dashboard[] }): Promise<Dashboard[]> {
+    const payload = await apiList<BackendDashboard>('/dashboards/')
+    const currentById = new Map((options?.currentDashboards ?? []).map((dashboard) => [dashboard.id, dashboard]))
+    return payload.map((dashboard) => mapDashboard(dashboard, currentById))
+  },
+
+  async fetchGroups(options?: { users?: User[]; dashboards?: Dashboard[]; tenants?: Tenant[] }): Promise<UserGroup[]> {
+    const payload = await optionalList<BackendGroup>('/users/groups/')
+    const userNameById = new Map((options?.users ?? []).map((user) => [user.id, `${user.firstName} ${user.lastName}`]))
+    const dashboardNameById = new Map((options?.dashboards ?? []).map((dashboard) => [dashboard.id, dashboard.name]))
+    const tenantNameById = new Map((options?.tenants ?? []).map((tenant) => [tenant.id, tenant.name]))
+    return payload.map((group) => mapGroup(group, { userNameById, dashboardNameById, tenantNameById }))
+  },
+
+  async fetchWorkspaces(): Promise<Workspace[]> {
+    const payload = await apiList<BackendWorkspace>('/workspaces/')
+    return payload.map(mapWorkspace)
+  },
+
+  async fetchBrandings(): Promise<TenantBranding[]> {
+    const payload = await apiList<BackendBranding>('/branding/')
+    return payload.map(mapBranding)
+  },
+
+  async fetchRLSRules(): Promise<RLSRule[]> {
+    const payload = await optionalList<BackendRLSRule>('/permissions/rls-rules/')
+    return payload.map(mapRLSRule)
   },
 
   async fetchBootstrap(options?: { userRole?: UserRole }): Promise<BootstrapPayload> {
