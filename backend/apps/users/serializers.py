@@ -35,10 +35,10 @@ class UserGroupSerializer(serializers.ModelSerializer):
         }
 
     def get_members_count(self, obj):
-        return obj.members.count()
+        return len(obj.members.all())
 
     def get_dashboards_count(self, obj):
-        return obj.dashboards.count()
+        return len(obj.dashboards.all())
 
     def get_member_names(self, obj):
         return [member.full_name for member in obj.members.all()]
@@ -111,20 +111,26 @@ class UserSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'last_login', 'created_at', 'updated_at']
 
+    def _get_member_groups(self, obj):
+        return list(obj.member_groups.all())
+
+    def _get_active_direct_dashboard_ids(self, obj):
+        return [rule.dashboard_id for rule in obj.dashboard_access_rules.all() if rule.is_active]
+
+    def _get_group_dashboard_ids(self, obj):
+        dashboard_ids = []
+        for group in self._get_member_groups(obj):
+            dashboard_ids.extend(dashboard.id for dashboard in group.dashboards.all())
+        return dashboard_ids
+
     def get_group_ids(self, obj):
-        return list(obj.member_groups.values_list('id', flat=True))
+        return [group.id for group in self._get_member_groups(obj)]
 
     def get_group_names(self, obj):
-        return list(obj.member_groups.values_list('name', flat=True))
+        return [group.name for group in self._get_member_groups(obj)]
 
     def get_dashboard_ids(self, obj):
-        direct_dashboard_ids = set(
-            obj.dashboard_access_rules.filter(is_active=True).values_list('dashboard_id', flat=True)
-        )
-        group_dashboard_ids = set(
-            obj.member_groups.filter(dashboards__isnull=False).values_list('dashboards__id', flat=True)
-        )
-        return list(direct_dashboard_ids.union(group_dashboard_ids))
+        return list(dict.fromkeys([*self._get_active_direct_dashboard_ids(obj), *self._get_group_dashboard_ids(obj)]))
 
     def validate(self, attrs):
         request = self.context.get('request')
