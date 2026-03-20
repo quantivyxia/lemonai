@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import socket
 from datetime import timedelta
 from pathlib import Path
 
@@ -40,6 +41,17 @@ def append_host(values: list[str], host: str | None) -> list[str]:
     if not normalized or normalized in values:
         return values
     return [*values, normalized]
+
+
+def resolve_ipv4_host(host: str, port: str) -> str:
+    try:
+        addresses = socket.getaddrinfo(host, int(port), socket.AF_INET, socket.SOCK_STREAM)
+    except OSError:
+        return host
+    for family, _socktype, _proto, _canonname, sockaddr in addresses:
+        if family == socket.AF_INET and sockaddr:
+            return sockaddr[0]
+    return host
 
 
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY') or 'unsafe-secret-key'
@@ -109,17 +121,26 @@ ASGI_APPLICATION = 'config.asgi.application'
 DB_PROVIDER = os.getenv('DB_PROVIDER', 'sqlite').lower()
 
 if DB_PROVIDER == 'postgres':
+    postgres_host = os.getenv('POSTGRES_HOST', 'localhost')
+    postgres_port = os.getenv('POSTGRES_PORT', '5432')
+    postgres_options = {
+        'sslmode': os.getenv('POSTGRES_SSLMODE', 'require'),
+    }
+    postgres_hostaddr = os.getenv('POSTGRES_HOSTADDR')
+    if postgres_hostaddr:
+        postgres_options['hostaddr'] = postgres_hostaddr
+    elif env_bool('POSTGRES_FORCE_IPV4', False):
+        postgres_options['hostaddr'] = resolve_ipv4_host(postgres_host, postgres_port)
+
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
             'NAME': os.getenv('POSTGRES_DB', 'insighthub'),
             'USER': os.getenv('POSTGRES_USER', 'postgres'),
             'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'postgres'),
-            'HOST': os.getenv('POSTGRES_HOST', 'localhost'),
-            'PORT': os.getenv('POSTGRES_PORT', '5432'),
-            'OPTIONS': {
-                'sslmode': os.getenv('POSTGRES_SSLMODE', 'require'),
-            },
+            'HOST': postgres_host,
+            'PORT': postgres_port,
+            'OPTIONS': postgres_options,
             'CONN_MAX_AGE': env_int('POSTGRES_CONN_MAX_AGE', 60),
         }
     }
