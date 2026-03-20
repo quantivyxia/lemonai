@@ -33,9 +33,19 @@ def env_list(name: str, default: str = '') -> list[str]:
     return [item.strip() for item in raw_value.split(',') if item.strip()]
 
 
+def append_host(values: list[str], host: str | None) -> list[str]:
+    if not host:
+        return values
+    normalized = host.strip()
+    if not normalized or normalized in values:
+        return values
+    return [*values, normalized]
+
+
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY') or 'unsafe-secret-key'
 DEBUG = env_bool('DJANGO_DEBUG', False)
 ALLOWED_HOSTS = env_list('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1')
+ALLOWED_HOSTS = append_host(ALLOWED_HOSTS, os.getenv('WEBSITE_HOSTNAME'))
 
 INSTALLED_APPS = [
     'corsheaders',
