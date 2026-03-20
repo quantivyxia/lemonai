@@ -333,6 +333,20 @@ type BackendSystemSummary = {
   }
 }
 
+type BackendBootstrapPayload = {
+  request_id: string
+  tenants: BackendTenant[]
+  users: BackendUser[]
+  workspaces: BackendWorkspace[]
+  dashboards: BackendDashboard[]
+  dashboard_columns: BackendDashboardColumn[]
+  groups: BackendGroup[]
+  access_logs: BackendAccessLog[]
+  brandings: BackendBranding[]
+  rls_rules: BackendRLSRule[]
+  roles: BackendRole[]
+}
+
 const optionalList = async <T>(path: string): Promise<T[]> => {
   try {
     return await apiList<T>(path)
@@ -630,35 +644,18 @@ export const platformApi = {
   },
 
   async fetchBootstrap(options?: { userRole?: UserRole }): Promise<BootstrapPayload> {
-    const userRole = options?.userRole
-    const canReadUsers = userRole === 'super_admin' || userRole === 'analyst'
-    const canReadAudit = userRole === 'super_admin' || userRole === 'analyst'
-    const canReadRLS = userRole === 'super_admin' || userRole === 'analyst'
-    const canReadRoles = userRole === 'super_admin' || userRole === 'analyst'
-
-    const [
-      tenantsRaw,
-      usersRaw,
-      workspacesRaw,
-      dashboardsRaw,
-      dashboardColumnsRaw,
-      groupsRaw,
-      accessLogsRaw,
-      brandingsRaw,
-      rlsRulesRaw,
-      rolesRaw,
-    ] = await Promise.all([
-      apiList<BackendTenant>('/tenants/'),
-      canReadUsers ? apiList<BackendUser>('/users/') : Promise.resolve([]),
-      apiList<BackendWorkspace>('/workspaces/'),
-      apiList<BackendDashboard>('/dashboards/'),
-      optionalList<BackendDashboardColumn>('/dashboards/columns/'),
-      optionalList<BackendGroup>('/users/groups/'),
-      canReadAudit ? optionalList<BackendAccessLog>('/audit/logs/') : Promise.resolve([]),
-      apiList<BackendBranding>('/branding/'),
-      canReadRLS ? optionalList<BackendRLSRule>('/permissions/rls-rules/') : Promise.resolve([]),
-      canReadRoles ? optionalList<BackendRole>('/permissions/roles/') : Promise.resolve([]),
-    ])
+    void options
+    const bootstrap = await apiRequest<BackendBootstrapPayload>('/bootstrap/')
+    const tenantsRaw = bootstrap.tenants
+    const usersRaw = bootstrap.users
+    const workspacesRaw = bootstrap.workspaces
+    const dashboardsRaw = bootstrap.dashboards
+    const dashboardColumnsRaw = bootstrap.dashboard_columns
+    const groupsRaw = bootstrap.groups
+    const accessLogsRaw = bootstrap.access_logs
+    const brandingsRaw = bootstrap.brandings
+    const rlsRulesRaw = bootstrap.rls_rules
+    const rolesRaw = bootstrap.roles
 
     const tenantById = new Map<string, string>()
     const tenants: Tenant[] = tenantsRaw.map((tenant) => {
