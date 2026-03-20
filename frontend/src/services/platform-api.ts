@@ -404,6 +404,23 @@ const toNumber = (value: number | string | null | undefined, fallback = 0) => {
   return fallback
 }
 
+const mapUser = (user: BackendUser): User => ({
+  id: user.id,
+  firstName: user.first_name,
+  lastName: user.last_name,
+  email: user.email,
+  tenantId: user.tenant ?? 'global',
+  tenantName: user.tenant_name ?? 'InsightHub',
+  role: user.role_code,
+  group: user.group_name ?? '',
+  groups: user.group_names ?? (user.group_name ? [user.group_name] : []),
+  groupIds: user.group_ids ?? [],
+  dashboardIds: user.dashboard_ids ?? [],
+  status: user.status,
+  lastAccessAt: user.last_login ?? new Date().toISOString(),
+  avatarUrl: user.avatar_url,
+})
+
 const mapPowerBIConnection = (connection: BackendPowerBIConnection): PowerBIConnection => ({
   id: connection.id,
   tenantId: connection.tenant,
@@ -449,6 +466,11 @@ const mapPowerBIGatewayDatasource = (
 })
 
 export const platformApi = {
+  async fetchUsers(): Promise<User[]> {
+    const usersRaw = await apiList<BackendUser>('/users/')
+    return usersRaw.map(mapUser)
+  },
+
   async fetchBootstrap(options?: { userRole?: UserRole }): Promise<BootstrapPayload> {
     const userRole = options?.userRole
     const canReadUsers = userRole === 'super_admin' || userRole === 'analyst'
@@ -526,22 +548,7 @@ export const platformApi = {
       }
     })
 
-    const users: User[] = usersRaw.map((user) => ({
-      id: user.id,
-      firstName: user.first_name,
-      lastName: user.last_name,
-      email: user.email,
-      tenantId: user.tenant ?? 'global',
-      tenantName: user.tenant_name ?? 'InsightHub',
-      role: user.role_code,
-      group: user.group_name ?? '',
-      groups: user.group_names ?? (user.group_name ? [user.group_name] : []),
-      groupIds: user.group_ids ?? [],
-      dashboardIds: user.dashboard_ids ?? [],
-      status: user.status,
-      lastAccessAt: user.last_login ?? new Date().toISOString(),
-      avatarUrl: user.avatar_url,
-    }))
+    const users: User[] = usersRaw.map(mapUser)
     const userNameById = new Map(users.map((user) => [user.id, `${user.firstName} ${user.lastName}`]))
 
     const workspaces: Workspace[] = workspacesRaw.map((workspace) => ({

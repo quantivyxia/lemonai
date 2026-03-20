@@ -164,6 +164,16 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
     }
   }, [isAuthenticated, user?.role])
 
+  const reloadUsers = useCallback(async () => {
+    if (!isAuthenticated || (user?.role !== 'super_admin' && user?.role !== 'analyst')) {
+      setState((current) => ({ ...current, users: [] }))
+      return
+    }
+
+    const users = await platformApi.fetchUsers()
+    setState((current) => ({ ...current, users }))
+  }, [isAuthenticated, user?.role])
+
   useEffect(() => {
     void reloadData()
   }, [reloadData])
@@ -222,9 +232,9 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
         avatar_url: user.avatarUrl ?? '',
         ...(user.password ? { password: user.password } : {}),
       })
-      await reloadData()
+      await reloadUsers()
     },
-    [reloadData, roleIds, state.groups],
+    [reloadUsers, roleIds, state.groups],
   )
 
   const toggleUserStatus: PlatformStoreValue['toggleUserStatus'] = useCallback(
@@ -236,25 +246,25 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
         id: userId,
         status: user.status === 'active' ? 'inactive' : 'active',
       })
-      await reloadData()
+      await reloadUsers()
     },
-    [reloadData, state.users],
+    [reloadUsers, state.users],
   )
 
   const deleteUser: PlatformStoreValue['deleteUser'] = useCallback(
     async (userId) => {
       await platformApi.deleteUser(userId)
-      await reloadData()
+      await reloadUsers()
     },
-    [reloadData],
+    [reloadUsers],
   )
 
   const deleteUsers: PlatformStoreValue['deleteUsers'] = useCallback(
     async (userIds) => {
       await platformApi.deleteUsers(userIds)
-      await reloadData()
+      await reloadUsers()
     },
-    [reloadData],
+    [reloadUsers],
   )
 
   const upsertDashboard: PlatformStoreValue['upsertDashboard'] = useCallback(
