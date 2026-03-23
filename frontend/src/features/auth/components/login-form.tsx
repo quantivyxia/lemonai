@@ -63,7 +63,7 @@ export const LoginForm = () => {
     >
       <Card className="border-border/70 shadow-floating">
         <CardHeader className="space-y-2">
-          <CardTitle>Entrar no InsightHub</CardTitle>
+          <CardTitle>Entrar no LemonsBI</CardTitle>
           <CardDescription>Acesse seu portal analitico com seguranca e governanca.</CardDescription>
         </CardHeader>
         <CardContent>
