@@ -107,6 +107,8 @@ const initialState: PersistedState = {
   settings: defaultPlatformSettings,
 }
 
+const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms))
+
 export const PlatformStoreContext = createContext<PlatformStoreValue | undefined>(undefined)
 
 export const PlatformStoreProvider = ({ children }: { children: React.ReactNode }) => {
@@ -119,6 +121,19 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
     analyst: '',
     viewer: '',
   })
+
+  const fetchBootstrapWithRetry = useCallback(async () => {
+    try {
+      return await platformApi.fetchBootstrap({ userRole: user?.role })
+    } catch (firstError) {
+      await wait(800)
+      try {
+        return await platformApi.fetchBootstrap({ userRole: user?.role })
+      } catch {
+        throw firstError
+      }
+    }
+  }, [user?.role])
 
   const reloadData = useCallback(async () => {
     if (!isAuthenticated) {
@@ -138,7 +153,7 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
 
     setIsLoading(true)
     try {
-      const data = await platformApi.fetchBootstrap({ userRole: user?.role })
+      const data = await fetchBootstrapWithRetry()
       setLoadError(null)
       setState((current) => ({
         ...current,
@@ -162,7 +177,7 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
     } finally {
       setIsLoading(false)
     }
-  }, [isAuthenticated, user?.role])
+  }, [fetchBootstrapWithRetry, isAuthenticated])
 
   const reloadTenants = useCallback(async () => {
     if (!isAuthenticated) {
