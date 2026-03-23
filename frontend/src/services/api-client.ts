@@ -35,6 +35,11 @@ const parseBody = async (response: Response) => {
   }
 }
 
+const looksLikeHtmlDocument = (value: string) => {
+  const normalized = value.trim().toLowerCase()
+  return normalized.startsWith('<!doctype html') || normalized.startsWith('<html')
+}
+
 const withRequestId = (message: string, payload: unknown) => {
   if (!payload || typeof payload !== 'object') return message
   const requestId = (payload as { request_id?: unknown }).request_id
@@ -54,7 +59,9 @@ const statusFallbackMessage = (status: number) => {
 const resolveErrorMessage = (payload: unknown, status: number) => {
   const fallback = statusFallbackMessage(status)
   if (!payload) return fallback
-  if (typeof payload === 'string') return payload
+  if (typeof payload === 'string') {
+    return looksLikeHtmlDocument(payload) ? fallback : payload
+  }
   if (typeof payload !== 'object') return fallback
 
   const maybeDetail = (payload as { detail?: unknown }).detail
