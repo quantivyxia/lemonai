@@ -225,9 +225,6 @@ export const DashboardViewPage = () => {
               <RefreshCcw className="h-4 w-4" />
               Atualizar token
             </Button>
-            <Button variant="outline" className="gap-2" onClick={() => setEmbedState('error')}>
-              Simular erro
-            </Button>
             <Button className="gap-2" onClick={handleFullScreen}>
               <Maximize2 className="h-4 w-4" />
               Tela cheia
@@ -238,7 +235,7 @@ export const DashboardViewPage = () => {
 
       <div className="grid gap-4 lg:grid-cols-1">
         <Card id="embed-container">
-          <CardHeader className="pb-3">
+          <CardHeader className="pb-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="neutral">{dashboard.tenantName}</Badge>
@@ -255,7 +252,7 @@ export const DashboardViewPage = () => {
             </div>
           </CardHeader>
           <CardContent className="px-3 pb-3 pt-0 sm:px-4">
-            <div className="relative h-[calc(100vh-245px)] min-h-[640px] overflow-hidden rounded-2xl border border-primary/20 bg-muted/20 p-2">
+            <div className="relative h-[calc(100vh-205px)] min-h-[720px] overflow-hidden rounded-2xl border border-primary/20 bg-muted/20 p-2">
               {embedState === 'loading' ? (
                 <>
                   <Skeleton className="h-full w-full rounded-xl" />
@@ -264,14 +261,10 @@ export const DashboardViewPage = () => {
               ) : null}
 
               {embedState === 'ready' ? (
-                <div className="flex h-full min-h-0 flex-col rounded-xl border border-border/70 bg-white p-2">
-                  <div className="mb-3 flex items-center justify-between">
-                    <p className="text-sm font-semibold text-slate-900">Power BI Embedded</p>
-                    <Badge>{embedConfig?.accessToken.startsWith('demo-embed-token') ? 'Token demo' : 'Token real'}</Badge>
-                  </div>
+                <div className="h-full rounded-xl border border-border/70 bg-white p-2">
                   <div
                     ref={embedHostRef}
-                    className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border/60"
+                    className="h-full overflow-hidden rounded-lg border border-border/60"
                   />
                 </div>
               ) : null}
