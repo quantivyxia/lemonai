@@ -9,7 +9,6 @@ import { z } from 'zod'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { useAuth } from '@/hooks/use-auth'
 
@@ -31,15 +30,13 @@ export const LoginForm = () => {
   const {
     register,
     handleSubmit,
-    setValue,
-    watch,
     formState: { errors, isSubmitting },
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
       email: '',
       password: '',
-      remember: true,
+      remember: false,
     },
   })
 
@@ -100,14 +97,7 @@ export const LoginForm = () => {
               ) : null}
             </div>
 
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 text-sm text-slate-600">
-                <Checkbox
-                  checked={watch('remember')}
-                  onCheckedChange={(checked) => setValue('remember', Boolean(checked))}
-                />
-                Lembrar acesso
-              </label>
+            <div className="flex items-center justify-end">
               <button type="button" className="text-sm font-medium text-primary hover:underline">
                 Esqueceu a senha?
               </button>
