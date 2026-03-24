@@ -102,9 +102,15 @@ class PowerBIEmbedService:
         if configured:
             return [role.strip() for role in configured.split(',') if role.strip()]
 
-        default_role = os.getenv('POWERBI_DEFAULT_RLS_ROLE', 'InsightHubRLS').strip()
+        default_role = os.getenv('POWERBI_DEFAULT_RLS_ROLE', '').strip()
         if default_role and rls_context:
             return [default_role]
+        if rls_context:
+            raise EmbedIntegrationError(
+                'RLS ativo sem role configurado no Power BI. '
+                'Defina POWERBI_DEFAULT_RLS_ROLE com o nome exato do role do dataset '
+                'ou configure POWERBI_RLS_ROLES.'
+            )
         return []
 
     def _build_access_token(self, dashboard, user, rls_context, rls_payload: dict, rls_roles: list[str]):
