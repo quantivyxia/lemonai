@@ -3,6 +3,9 @@ import { appLogger } from '@/services/app-logger'
 import type {
   AccessLog,
   ActivityItem,
+  AuditActivity,
+  AuditSummary,
+  AuditTopUser,
   Dashboard,
   DashboardColumn,
   PowerBIConnection,
@@ -121,6 +124,7 @@ type BackendAccessLog = {
   accessed_at: string
   status: 'success' | 'denied' | 'error'
   origin: 'portal' | 'api' | 'mobile'
+  details?: string
 }
 
 type BackendBranding = {
@@ -330,6 +334,55 @@ type BackendBootstrapPayload = {
   roles: BackendRole[]
 }
 
+type BackendAuditActivity = {
+  id: string
+  kind: 'access' | 'event'
+  timestamp: string
+  title: string
+  description: string
+  userId?: string
+  userName: string
+  tenantId?: string
+  tenantName: string
+  dashboardId?: string
+  dashboardName?: string
+  status?: 'success' | 'denied' | 'error' | ''
+  origin?: 'portal' | 'api' | 'mobile' | ''
+  category: 'auth' | 'authorization' | 'admin' | 'integration' | 'system' | 'access'
+  level: 'info' | 'warn' | 'error'
+  resourceType?: string
+  resourceId?: string
+  endpoint?: string
+  method?: string
+  statusCode?: number | null
+}
+
+type BackendAuditTopUser = {
+  userId?: string
+  userName: string
+  activityCount: number
+  accessCount: number
+  lastActivityAt: string
+  estimatedMinutes: number
+}
+
+type BackendAuditInsights = {
+  request_id: string
+  summary: {
+    total_activities: number
+    accesses_this_month: number
+    active_users: number
+    unique_dashboards: number
+    estimated_active_minutes: number
+    error_events: number
+    denied_events: number
+    admin_changes: number
+  }
+  top_users: BackendAuditTopUser[]
+  activities: BackendAuditActivity[]
+  access_logs: BackendAccessLog[]
+}
+
 const optionalList = async <T>(path: string): Promise<T[]> => {
   try {
     return await apiList<T>(path)
@@ -511,6 +564,21 @@ const mapGroup = (
     group.dashboard_names && group.dashboard_names.length > 0
       ? group.dashboard_names
       : group.dashboards.map((dashboardId) => options?.dashboardNameById?.get(dashboardId) ?? dashboardId),
+})
+
+const mapAccessLog = (log: BackendAccessLog): AccessLog => ({
+  id: log.id,
+  userId: log.user ?? undefined,
+  tenantId: log.tenant,
+  userName: log.user_name ?? 'Usuario desconhecido',
+  tenantName: log.tenant_name,
+  dashboardId: log.dashboard ?? undefined,
+  dashboardName: log.dashboard_name ?? 'Dashboard removido',
+  ipAddress: log.ip_address,
+  accessedAt: log.accessed_at,
+  status: log.status,
+  origin: log.origin,
+  details: log.details ?? '',
 })
 
 const mapBranding = (branding: BackendBranding): TenantBranding => ({
@@ -701,17 +769,7 @@ export const platformApi = {
     }))
     const workspaceNameById = new Map(workspaces.map((workspace) => [workspace.id, workspace.name]))
 
-    const accessLogs: AccessLog[] = accessLogsRaw.map((log) => ({
-      id: log.id,
-      tenantId: log.tenant,
-      userName: log.user_name ?? 'Usuario desconhecido',
-      tenantName: log.tenant_name,
-      dashboardName: log.dashboard_name ?? 'Dashboard removido',
-      ipAddress: log.ip_address,
-      accessedAt: log.accessed_at,
-      status: log.status,
-      origin: log.origin,
-    }))
+    const accessLogs: AccessLog[] = accessLogsRaw.map(mapAccessLog)
 
     const viewsByDashboardId = accessLogsRaw.reduce<Record<string, number>>((acc, log) => {
       if (!log.dashboard || log.status !== 'success') return acc
@@ -1166,6 +1224,79 @@ export const platformApi = {
       metadata: event.metadata ?? {},
       createdAt: event.created_at,
     }))
+  },
+
+  async getAuditInsights(filters?: {
+    period?: string
+    tenant?: string
+    user?: string
+    dashboard?: string
+    status?: string
+    origin?: string
+    search?: string
+  }) {
+    const params = new URLSearchParams()
+    if (filters?.period && filters.period !== 'all') params.set('period', filters.period)
+    if (filters?.tenant && filters.tenant !== 'all') params.set('tenant', filters.tenant)
+    if (filters?.user && filters.user !== 'all') params.set('user', filters.user)
+    if (filters?.dashboard && filters.dashboard !== 'all') params.set('dashboard', filters.dashboard)
+    if (filters?.status && filters.status !== 'all') params.set('status', filters.status)
+    if (filters?.origin && filters.origin !== 'all') params.set('origin', filters.origin)
+    if (filters?.search?.trim()) params.set('search', filters.search.trim())
+
+    const query = params.toString()
+    const payload = await apiRequest<BackendAuditInsights>(`/audit/insights/${query ? `?${query}` : ''}`)
+
+    return {
+      requestId: payload.request_id,
+      summary: {
+        totalActivities: payload.summary.total_activities,
+        accessesThisMonth: payload.summary.accesses_this_month,
+        activeUsers: payload.summary.active_users,
+        uniqueDashboards: payload.summary.unique_dashboards,
+        estimatedActiveMinutes: payload.summary.estimated_active_minutes,
+        errorEvents: payload.summary.error_events,
+        deniedEvents: payload.summary.denied_events,
+        adminChanges: payload.summary.admin_changes,
+      } satisfies AuditSummary,
+      topUsers: payload.top_users.map(
+        (item) =>
+          ({
+            userId: item.userId,
+            userName: item.userName,
+            activityCount: item.activityCount,
+            accessCount: item.accessCount,
+            lastActivityAt: item.lastActivityAt,
+            estimatedMinutes: item.estimatedMinutes,
+          }) satisfies AuditTopUser,
+      ),
+      activities: payload.activities.map(
+        (activity) =>
+          ({
+            id: activity.id,
+            kind: activity.kind,
+            timestamp: activity.timestamp,
+            title: activity.title,
+            description: activity.description,
+            userId: activity.userId,
+            userName: activity.userName,
+            tenantId: activity.tenantId,
+            tenantName: activity.tenantName,
+            dashboardId: activity.dashboardId,
+            dashboardName: activity.dashboardName,
+            status: activity.status ?? '',
+            origin: activity.origin ?? '',
+            category: activity.category,
+            level: activity.level,
+            resourceType: activity.resourceType,
+            resourceId: activity.resourceId,
+            endpoint: activity.endpoint,
+            method: activity.method,
+            statusCode: activity.statusCode ?? undefined,
+          }) satisfies AuditActivity,
+      ),
+      accessLogs: payload.access_logs.map(mapAccessLog),
+    }
   },
 }
 

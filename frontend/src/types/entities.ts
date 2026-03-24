@@ -108,14 +108,60 @@ export type RoleAssignment = {
 
 export type AccessLog = {
   id: string
+  userId?: string
   tenantId: string
   userName: string
   tenantName: string
+  dashboardId?: string
   dashboardName: string
   ipAddress: string
   accessedAt: string
   status: AccessStatus
   origin: AccessOrigin
+  details?: string
+}
+
+export type AuditActivity = {
+  id: string
+  kind: 'access' | 'event'
+  timestamp: string
+  title: string
+  description: string
+  userId?: string
+  userName: string
+  tenantId?: string
+  tenantName: string
+  dashboardId?: string
+  dashboardName?: string
+  status?: AccessStatus | ''
+  origin?: AccessOrigin | ''
+  category: SystemEventCategory | 'access'
+  level: SystemEventLevel
+  resourceType?: string
+  resourceId?: string
+  endpoint?: string
+  method?: string
+  statusCode?: number | null
+}
+
+export type AuditTopUser = {
+  userId?: string
+  userName: string
+  activityCount: number
+  accessCount: number
+  lastActivityAt: string
+  estimatedMinutes: number
+}
+
+export type AuditSummary = {
+  totalActivities: number
+  accessesThisMonth: number
+  activeUsers: number
+  uniqueDashboards: number
+  estimatedActiveMinutes: number
+  errorEvents: number
+  deniedEvents: number
+  adminChanges: number
 }
 
 export type SystemEventLog = {
