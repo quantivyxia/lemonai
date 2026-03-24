@@ -395,7 +395,11 @@ const optionalList = async <T>(path: string): Promise<T[]> => {
   }
 }
 
-const toISODateKey = (value: string) => new Date(value).toISOString().slice(0, 10)
+const toISODateKey = (value: string) => {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toISOString().slice(0, 10)
+}
 
 const buildAccessSeries = (logs: AccessLog[]) => {
   const now = new Date()
@@ -407,6 +411,7 @@ const buildAccessSeries = (logs: AccessLog[]) => {
 
   const byDate = logs.reduce<Record<string, number>>((acc, log) => {
     const key = toISODateKey(log.accessedAt)
+    if (!key) return acc
     acc[key] = (acc[key] ?? 0) + 1
     return acc
   }, {})
