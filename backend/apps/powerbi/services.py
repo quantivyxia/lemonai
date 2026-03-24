@@ -254,53 +254,13 @@ class PowerBIClient:
         self,
         workspace_id: str,
         report_id: str,
-        dataset_id: str,
-        user,
-        rls_context,
-        rls_payload: dict | None = None,
-        rls_roles: list[str] | None = None,
     ):
         payload = {'accessLevel': 'View'}
-        role_list = [role for role in (rls_roles or []) if isinstance(role, str) and role.strip()]
-        should_send_identity = bool(dataset_id and (rls_context or role_list))
-        if should_send_identity:
-            identity: dict[str, object] = {
-                'username': getattr(user, 'email', 'embed@insighthub.local'),
-                'datasets': [dataset_id],
-            }
-
-            if role_list:
-                identity['roles'] = role_list
-
-            if rls_payload:
-                custom_data = str(rls_payload.get('tokenString') or '')
-                max_chars = int(os.getenv('POWERBI_RLS_CUSTOM_DATA_MAX_CHARS', '3500'))
-                if custom_data and len(custom_data) > max_chars:
-                    raise PowerBIServiceError(
-                        f'Payload RLS excedeu {max_chars} caracteres em customData. '
-                        'Reduza valores de regras ou aumente POWERBI_RLS_CUSTOM_DATA_MAX_CHARS.'
-                    )
-                if custom_data:
-                    identity['customData'] = custom_data
-
-            payload['identities'] = [
-                identity
-            ]
-
-        try:
-            data = self._request(
-                'POST',
-                f'groups/{workspace_id}/reports/{report_id}/GenerateToken',
-                payload=payload,
-            )
-        except PowerBIServiceError as exc:
-            message = str(exc).lower()
-            if should_send_identity and 'effective identity' in message:
-                raise PowerBIServiceError(
-                    'Falha de RLS no embed token: effective identity rejeitada pelo dataset/report. '
-                    'Verifique role do Power BI, permissao da service principal e regra DAX.'
-                )
-            raise
+        data = self._request(
+            'POST',
+            f'groups/{workspace_id}/reports/{report_id}/GenerateToken',
+            payload=payload,
+        )
 
         token = data.get('token')
         if not token:

@@ -240,29 +240,12 @@ type DashboardEmbedConfig = {
   embedUrl: string
   accessToken: string
   expiresAt: string
-  rls: Array<{
-    tableName: string
-    columnName: string
-    operator: 'in' | 'not_in'
-    ruleType: 'allow' | 'deny'
-    values: string[]
-  }>
-  reportFilters?: Array<{
+  reportFilters: Array<{
     table: string
     column: string
     operator: 'In' | 'NotIn'
     values: string[]
   }>
-  rlsPayload?: {
-    version: number
-    userId: string
-    userEmail: string
-    tenantId: string
-    dashboardId: string
-    tokenString: string
-    rules: Array<{ columnName: string; allow: string[]; deny: string[] }>
-  }
-  rlsRoles?: string[]
 }
 
 type BootstrapPayload = {

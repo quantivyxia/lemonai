@@ -105,7 +105,7 @@ export const DashboardViewPage = () => {
     const powerBIService = powerBIServiceRef.current
     powerBIService.reset(container)
 
-    const reportFilters: models.IFilter[] = (embedConfig.reportFilters ?? []).map((rule) => ({
+    const reportFilters: models.IFilter[] = embedConfig.reportFilters.map((rule) => ({
       $schema: 'http://powerbi.com/product/schema#basic',
       target: {
         table: rule.table,
