@@ -21,9 +21,25 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { usePlatformStore } from '@/hooks/use-platform-store'
+import { appLogger } from '@/services/app-logger'
 import { platformApi, type DashboardEmbedConfig } from '@/services/platform-api'
 
 type EmbedState = 'loading' | 'ready' | 'error'
+
+const safeResetPowerBIContainer = (powerBIService: service.Service, container: HTMLDivElement) => {
+  try {
+    powerBIService.reset(container)
+  } catch (error) {
+    appLogger.warn('Falha ao limpar o container do Power BI. Aplicando limpeza manual do DOM.', {
+      message: error instanceof Error ? error.message : 'unknown',
+    })
+    try {
+      container.replaceChildren()
+    } catch {
+      container.innerHTML = ''
+    }
+  }
+}
 
 export const DashboardViewPage = () => {
   const { dashboards } = usePlatformStore()
@@ -103,7 +119,7 @@ export const DashboardViewPage = () => {
     }
 
     const powerBIService = powerBIServiceRef.current
-    powerBIService.reset(container)
+    safeResetPowerBIContainer(powerBIService, container)
 
     const reportFilters: models.IFilter[] = embedConfig.reportFilters.map((rule) => ({
       $schema: 'http://powerbi.com/product/schema#basic',
@@ -157,7 +173,7 @@ export const DashboardViewPage = () => {
     return () => {
       report.off('loaded')
       report.off('error')
-      powerBIService.reset(container)
+      safeResetPowerBIContainer(powerBIService, container)
     }
   }, [embedConfig, embedState])
 
