@@ -68,7 +68,7 @@ export const Topbar = ({ onMobileMenuOpen }: { onMobileMenuOpen: () => void }) =
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-auto rounded-xl px-2 py-1.5">
+              <Button variant="ghost" className="h-auto gap-3 rounded-xl px-2 py-1.5">
                 <span className="hidden text-right sm:block">
                   <span className="block text-sm font-semibold text-slate-900">{user?.name}</span>
                   <span className="block text-xs text-muted-foreground">{user?.tenantName}</span>
