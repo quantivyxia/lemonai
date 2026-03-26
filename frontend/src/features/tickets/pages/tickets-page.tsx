@@ -1,0 +1,683 @@
+﻿import {
+  CalendarClock,
+  CircleDot,
+  Clock3,
+  LifeBuoy,
+  MessageSquare,
+  Paperclip,
+  Plus,
+  RefreshCcw,
+  Save,
+  Search,
+  Shield,
+  Ticket as TicketIcon,
+  Upload,
+} from 'lucide-react'
+import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { toast } from 'sonner'
+
+import { EmptyState } from '@/components/shared/empty-state'
+import { PageHeader } from '@/components/shared/page-header'
+import { SearchableSelect } from '@/components/shared/searchable-select'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
+import { useAuth } from '@/hooks/use-auth'
+import { usePlatformStore } from '@/hooks/use-platform-store'
+import { useTenantScope } from '@/hooks/use-tenant-scope'
+import { cn, formatDate, formatNumber } from '@/lib/utils'
+import { ticketsApi } from '@/services/tickets-api'
+import type { Ticket, TicketPriority, TicketStatus } from '@/types/entities'
+
+type TicketFilters = {
+  tenant: string
+  requester: string
+  status: string
+  priority: string
+  search: string
+}
+
+type TicketForm = {
+  id?: string
+  title: string
+  description: string
+}
+
+type ManagementForm = {
+  status: TicketStatus
+  priority: TicketPriority
+  dueDate: string
+}
+
+const defaultFilters = (isSuperAdmin: boolean, userTenantId?: string | null): TicketFilters => ({
+  tenant: isSuperAdmin ? 'all' : (userTenantId ?? 'all'),
+  requester: 'all',
+  status: 'all',
+  priority: 'all',
+  search: '',
+})
+
+const statusOptions = [
+  { value: 'all', label: 'Todos os status' },
+  { value: 'open', label: 'Aberto' },
+  { value: 'analysis', label: 'Em analise' },
+  { value: 'in_progress', label: 'Em andamento' },
+  { value: 'resolved', label: 'Resolvido' },
+  { value: 'closed', label: 'Fechado' },
+]
+
+const priorityOptions = [
+  { value: 'all', label: 'Todas as prioridades' },
+  { value: 'low', label: 'Baixa' },
+  { value: 'medium', label: 'Media' },
+  { value: 'high', label: 'Alta' },
+  { value: 'urgent', label: 'Urgente' },
+]
+
+const statusEditorOptions: Array<{ value: TicketStatus; label: string }> = [
+  { value: 'open', label: 'Aberto' },
+  { value: 'analysis', label: 'Em analise' },
+  { value: 'in_progress', label: 'Em andamento' },
+  { value: 'resolved', label: 'Resolvido' },
+  { value: 'closed', label: 'Fechado' },
+]
+
+const priorityEditorOptions: Array<{ value: TicketPriority; label: string }> = [
+  { value: 'low', label: 'Baixa' },
+  { value: 'medium', label: 'Media' },
+  { value: 'high', label: 'Alta' },
+  { value: 'urgent', label: 'Urgente' },
+]
+
+const statusVariantMap: Record<TicketStatus, 'default' | 'warning' | 'success' | 'neutral'> = {
+  open: 'warning',
+  analysis: 'default',
+  in_progress: 'default',
+  resolved: 'success',
+  closed: 'neutral',
+}
+
+const priorityVariantMap: Record<TicketPriority, 'neutral' | 'warning' | 'danger'> = {
+  low: 'neutral',
+  medium: 'neutral',
+  high: 'warning',
+  urgent: 'danger',
+}
+
+const isPendingTicket = (status: TicketStatus) =>
+  status === 'open' || status === 'analysis' || status === 'in_progress'
+
+const isClosedTicket = (status: TicketStatus) => status === 'resolved' || status === 'closed'
+
+const formatDateOnly = (value?: string | null) => {
+  if (!value) return '-'
+  const parsed = new Date(`${value}T00:00:00`)
+  if (Number.isNaN(parsed.getTime())) return '-'
+  return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'medium' }).format(parsed)
+}
+
+const toDateInputValue = (value?: string | null) => {
+  if (!value) return ''
+  return value.slice(0, 10)
+}
+
+export const TicketsPage = () => {
+  const { user } = useAuth()
+  const { users, tenants } = usePlatformStore()
+  const { isSuperAdmin, userTenantId, userTenantName, filterByTenant } = useTenantScope()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [filters, setFilters] = useState<TicketFilters>(() => defaultFilters(isSuperAdmin, userTenantId))
+  const [appliedFilters, setAppliedFilters] = useState<TicketFilters>(() => defaultFilters(isSuperAdmin, userTenantId))
+  const [tickets, setTickets] = useState<Ticket[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [form, setForm] = useState<TicketForm>({ title: '', description: '' })
+  const [managementForm, setManagementForm] = useState<ManagementForm>({ status: 'open', priority: 'medium', dueDate: '' })
+  const [commentBody, setCommentBody] = useState('')
+  const [commentInternal, setCommentInternal] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [isCommentSaving, setIsCommentSaving] = useState(false)
+  const [isAttachmentSaving, setIsAttachmentSaving] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const selectedTicketId = searchParams.get('ticket')
+
+  const scopedUsers = useMemo(() => filterByTenant(users, (item) => ({ tenantId: item.tenantId })), [filterByTenant, users])
+  const scopedTenants = useMemo(() => filterByTenant(tenants, (item) => ({ tenantId: item.id })), [filterByTenant, tenants])
+
+  const requesterOptions = useMemo(
+    () => [{ value: 'all', label: 'Todos os solicitantes' }, ...scopedUsers.map((item) => ({ value: item.id, label: `${item.firstName} ${item.lastName}`, keywords: `${item.email} ${item.tenantName}` }))],
+    [scopedUsers],
+  )
+  const tenantOptions = useMemo(
+    () => [{ value: 'all', label: 'Todos os tenants' }, ...scopedTenants.map((item) => ({ value: item.id, label: item.name }))],
+    [scopedTenants],
+  )
+
+  const setTicketQuery = useCallback(
+    (ticketId: string | null) => {
+      setSearchParams(
+        (current) => {
+          const next = new URLSearchParams(current)
+          if (ticketId) next.set('ticket', ticketId)
+          else next.delete('ticket')
+          return next
+        },
+        { replace: true },
+      )
+    },
+    [setSearchParams],
+  )
+
+  const loadTickets = useCallback(
+    async (options?: { preferredTicketId?: string | null; currentSelectedTicketId?: string | null }) => {
+      setIsLoading(true)
+      try {
+        const data = await ticketsApi.listTickets({
+          tenant: appliedFilters.tenant,
+          requester: appliedFilters.requester,
+          status: appliedFilters.status,
+          priority: appliedFilters.priority,
+          search: appliedFilters.search,
+        })
+        setTickets(data)
+
+        const targetTicketId = options?.preferredTicketId ?? options?.currentSelectedTicketId ?? null
+        if (targetTicketId && data.some((item) => item.id === targetTicketId)) {
+          setTicketQuery(targetTicketId)
+        } else if (data[0]) {
+          setTicketQuery(data[0].id)
+        } else {
+          setTicketQuery(null)
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Nao foi possivel carregar os chamados.'
+        toast.error(message)
+      } finally {
+        setIsLoading(false)
+      }
+    },
+    [appliedFilters, setTicketQuery],
+  )
+
+  useEffect(() => {
+    if (isSuperAdmin) return
+    const tenantId = userTenantId ?? 'all'
+    setFilters((current) => ({ ...current, tenant: tenantId }))
+    setAppliedFilters((current) => ({ ...current, tenant: tenantId }))
+  }, [isSuperAdmin, userTenantId])
+
+  useEffect(() => {
+    void loadTickets({ currentSelectedTicketId: selectedTicketId })
+  }, [appliedFilters, loadTickets])
+
+  const selectedTicket = useMemo(() => tickets.find((item) => item.id === selectedTicketId) ?? null, [selectedTicketId, tickets])
+
+  useEffect(() => {
+    if (!selectedTicket) {
+      setCommentBody('')
+      setCommentInternal(false)
+      return
+    }
+
+    setManagementForm({
+      status: selectedTicket.status,
+      priority: selectedTicket.priority,
+      dueDate: toDateInputValue(selectedTicket.dueDate),
+    })
+    setCommentBody('')
+    setCommentInternal(false)
+  }, [selectedTicket])
+
+  useEffect(() => {
+    if (user?.role !== 'analyst' || !selectedTicketId) return
+    void ticketsApi.markTicketNotificationsRead(selectedTicketId).catch(() => undefined)
+  }, [selectedTicketId, user?.role])
+
+  useEffect(() => {
+    if (!selectedTicketId || isLoading || tickets.some((item) => item.id === selectedTicketId)) return
+    void loadTickets({ currentSelectedTicketId: selectedTicketId })
+  }, [isLoading, loadTickets, selectedTicketId, tickets])
+
+  const summary = useMemo(() => {
+    const now = new Date()
+    const overdue = tickets.filter((ticket) => {
+      if (!ticket.dueDate || isClosedTicket(ticket.status)) return false
+      return new Date(`${ticket.dueDate}T23:59:59`).getTime() < now.getTime()
+    }).length
+
+    return [
+      {
+        title: isSuperAdmin ? 'Total de chamados' : 'Meus chamados',
+        value: formatNumber(tickets.length),
+        description: 'Volume no recorte filtrado atual.',
+        icon: TicketIcon,
+      },
+      {
+        title: 'Pendentes',
+        value: formatNumber(tickets.filter((ticket) => isPendingTicket(ticket.status)).length),
+        description: 'Chamados abertos, em analise ou em andamento.',
+        icon: Clock3,
+      },
+      {
+        title: 'Prazo vencido',
+        value: formatNumber(overdue),
+        description: 'Chamados com previsao ultrapassada e sem fechamento.',
+        icon: CalendarClock,
+      },
+      {
+        title: 'Comentarios',
+        value: formatNumber(tickets.reduce((sum, ticket) => sum + ticket.commentsCount, 0)),
+        description: 'Interacoes registradas no historico exibido.',
+        icon: MessageSquare,
+      },
+    ]
+  }, [isSuperAdmin, tickets])
+
+  const openCreateDialog = () => {
+    setForm({ title: '', description: '' })
+    setIsDialogOpen(true)
+  }
+
+  const openEditDialog = () => {
+    if (!selectedTicket) return
+    setForm({ id: selectedTicket.id, title: selectedTicket.title, description: selectedTicket.description })
+    setIsDialogOpen(true)
+  }
+
+  const handleSaveTicket = async () => {
+    if (!form.title.trim()) {
+      toast.error('Preencha o titulo do chamado.')
+      return
+    }
+    if (!form.description.trim()) {
+      toast.error('Descreva o chamado com mais detalhe.')
+      return
+    }
+
+    setIsSaving(true)
+    try {
+      const saved = await ticketsApi.upsertTicket({ id: form.id, title: form.title.trim(), description: form.description.trim() })
+      await loadTickets({ preferredTicketId: saved.id })
+      setIsDialogOpen(false)
+      toast.success(form.id ? 'Chamado atualizado.' : 'Chamado criado com sucesso.')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Nao foi possivel salvar o chamado.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleSaveManagement = async () => {
+    if (!selectedTicket) return
+
+    setIsSaving(true)
+    try {
+      await ticketsApi.upsertTicket({
+        id: selectedTicket.id,
+        title: selectedTicket.title,
+        description: selectedTicket.description,
+        status: managementForm.status,
+        priority: managementForm.priority,
+        due_date: managementForm.dueDate || null,
+      })
+      await loadTickets({ preferredTicketId: selectedTicket.id })
+      toast.success('Gestao do chamado atualizada.')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Nao foi possivel atualizar o chamado.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleAddComment = async () => {
+    if (!selectedTicket) return
+    if (!commentBody.trim()) {
+      toast.error('Escreva um comentario antes de enviar.')
+      return
+    }
+
+    setIsCommentSaving(true)
+    try {
+      await ticketsApi.addComment(selectedTicket.id, {
+        body: commentBody.trim(),
+        is_internal: isSuperAdmin ? commentInternal : false,
+      })
+      setCommentBody('')
+      setCommentInternal(false)
+      await loadTickets({ preferredTicketId: selectedTicket.id })
+      toast.success('Comentario adicionado.')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Nao foi possivel adicionar o comentario.')
+    } finally {
+      setIsCommentSaving(false)
+    }
+  }
+
+  const handleSelectAttachment = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file || !selectedTicket) return
+
+    setIsAttachmentSaving(true)
+    try {
+      await ticketsApi.uploadAttachment(selectedTicket.id, file)
+      await loadTickets({ preferredTicketId: selectedTicket.id })
+      toast.success('Evidencia anexada.')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Nao foi possivel anexar a evidencia.')
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      setIsAttachmentSaving(false)
+    }
+  }
+
+  const canCreateTicket = user?.role === 'analyst'
+  const canEditBasics = Boolean(
+    selectedTicket && (isSuperAdmin || (user?.role === 'analyst' && selectedTicket.requesterId === user?.id)),
+  )
+
+  return (
+    <section className="animate-fade-in">
+      <PageHeader
+        title="Chamados"
+        description="Operacao de suporte com historico, evidencias e acompanhamento por status."
+        actions={
+          <>
+            <Button variant="outline" onClick={() => void loadTickets({ currentSelectedTicketId: selectedTicketId })}>
+              <RefreshCcw className="mr-2 h-4 w-4" />
+              Atualizar
+            </Button>
+            {canCreateTicket ? (
+              <Button onClick={openCreateDialog}>
+                <Plus className="mr-2 h-4 w-4" />
+                Novo chamado
+              </Button>
+            ) : null}
+          </>
+        }
+      />
+
+      <Card className="border-border/70 shadow-card">
+        <CardHeader>
+          <CardTitle>Filtros de chamados</CardTitle>
+          <CardDescription>Os indicadores, a lista e o painel lateral obedecem ao mesmo recorte.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 xl:grid-cols-5">
+          {isSuperAdmin ? (
+            <SearchableSelect value={filters.tenant} onValueChange={(value) => setFilters((current) => ({ ...current, tenant: value }))} options={tenantOptions} placeholder="Tenant" searchPlaceholder="Pesquisar tenant" />
+          ) : (
+            <Input value={userTenantName ?? 'Tenant atual'} disabled />
+          )}
+          {isSuperAdmin ? (
+            <SearchableSelect value={filters.requester} onValueChange={(value) => setFilters((current) => ({ ...current, requester: value }))} options={requesterOptions} placeholder="Solicitante" searchPlaceholder="Pesquisar solicitante" />
+          ) : null}
+          <SearchableSelect value={filters.status} onValueChange={(value) => setFilters((current) => ({ ...current, status: value }))} options={statusOptions} placeholder="Status" searchPlaceholder="Pesquisar status" />
+          <SearchableSelect value={filters.priority} onValueChange={(value) => setFilters((current) => ({ ...current, priority: value }))} options={priorityOptions} placeholder="Prioridade" searchPlaceholder="Pesquisar prioridade" />
+          <div className={cn('relative', isSuperAdmin ? 'xl:col-span-2' : 'xl:col-span-3')}>
+            <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input className="pl-9" placeholder="Buscar por codigo, titulo, descricao ou solicitante" value={filters.search} onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))} />
+          </div>
+          <Button onClick={() => setAppliedFilters(filters)}>Aplicar filtros</Button>
+        </CardContent>
+      </Card>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
+        {summary.map((card) => {
+          const Icon = card.icon
+          return (
+            <Card key={card.title} className="border-border/70 shadow-card">
+              <CardHeader className="pb-3">
+                <CardDescription>{card.title}</CardDescription>
+                <div className="flex items-start justify-between gap-3">
+                  <CardTitle className="text-2xl">{card.value}</CardTitle>
+                  <div className="rounded-xl bg-primary/10 p-2 text-primary">
+                    <Icon className="h-4 w-4" />
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">{card.description}</p>
+              </CardContent>
+            </Card>
+          )
+        })}
+      </div>
+
+      <div className="mt-4 grid gap-4 xl:grid-cols-[0.95fr_1.25fr]">
+        <Card className="border-border/70 shadow-card">
+          <CardHeader className="pb-3">
+            <CardTitle>Fila de chamados</CardTitle>
+            <CardDescription>{isSuperAdmin ? 'Visao global dos chamados do portal.' : 'Apenas os chamados abertos por voce.'}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} className="h-28 rounded-xl" />)}
+              </div>
+            ) : tickets.length ? (
+              <div className="space-y-3">
+                {tickets.map((ticket) => {
+                  const isSelected = ticket.id === selectedTicketId
+                  return (
+                    <button key={ticket.id} type="button" onClick={() => setTicketQuery(ticket.id)} className={cn('w-full rounded-2xl border p-4 text-left transition', isSelected ? 'border-primary/45 bg-primary/5 shadow-card' : 'border-border/70 bg-white hover:border-primary/30 hover:bg-slate-50/70')}>
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-semibold text-slate-900">{ticket.title}</p>
+                            <Badge variant={statusVariantMap[ticket.status]}>{ticket.statusLabel}</Badge>
+                            <Badge variant={priorityVariantMap[ticket.priority]}>{ticket.priorityLabel}</Badge>
+                          </div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">{ticket.code}</p>
+                        </div>
+                        <p className="text-xs text-muted-foreground">{formatDate(ticket.lastActivityAt)}</p>
+                      </div>
+
+                      <p className="mt-3 line-clamp-2 text-sm text-slate-700">{ticket.description}</p>
+
+                      <div className="mt-3 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
+                        <div><span className="font-medium text-slate-700">Solicitante:</span> {ticket.requesterName}</div>
+                        <div><span className="font-medium text-slate-700">Tenant:</span> {ticket.tenantName}</div>
+                        <div><span className="font-medium text-slate-700">Previsao:</span> {formatDateOnly(ticket.dueDate)}</div>
+                        <div className="flex items-center gap-3">
+                          <span className="inline-flex items-center gap-1"><MessageSquare className="h-3.5 w-3.5" />{formatNumber(ticket.commentsCount)}</span>
+                          <span className="inline-flex items-center gap-1"><Paperclip className="h-3.5 w-3.5" />{formatNumber(ticket.attachmentsCount)}</span>
+                        </div>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            ) : (
+              <EmptyState title="Nenhum chamado encontrado" description="Ajuste os filtros ou abra o primeiro chamado para iniciar o atendimento." icon={LifeBuoy} actionLabel={canCreateTicket ? 'Novo chamado' : undefined} onAction={canCreateTicket ? openCreateDialog : undefined} />
+            )}
+          </CardContent>
+        </Card>
+
+        {selectedTicket ? (
+          <div className="space-y-4">
+            <Card className="border-border/70 shadow-card">
+              <CardHeader className="pb-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      {selectedTicket.title}
+                      <Badge variant={statusVariantMap[selectedTicket.status]}>{selectedTicket.statusLabel}</Badge>
+                    </CardTitle>
+                    <CardDescription className="mt-1">{selectedTicket.code} • aberto em {formatDate(selectedTicket.openedAt)}</CardDescription>
+                  </div>
+                  {canEditBasics ? <Button variant="outline" size="sm" onClick={openEditDialog}>Editar chamado</Button> : null}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="rounded-xl border border-border/70 bg-slate-50/70 p-4 text-sm text-slate-700">{selectedTicket.description}</div>
+
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <InfoCard label="Solicitante" value={selectedTicket.requesterName} />
+                  <InfoCard label="Tenant" value={selectedTicket.tenantName} />
+                  <InfoCard label="Ultima atividade" value={formatDate(selectedTicket.lastActivityAt)} />
+                  <InfoCard label="Previsao" value={formatDateOnly(selectedTicket.dueDate)} />
+                </div>
+              </CardContent>
+            </Card>
+
+            {isSuperAdmin ? (
+              <Card className="border-border/70 shadow-card">
+                <CardHeader>
+                  <CardTitle>Gestao administrativa</CardTitle>
+                  <CardDescription>Atualize status, prioridade e previsao de resolucao do chamado selecionado.</CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-3 md:grid-cols-3">
+                  <div>
+                    <label className="text-sm font-medium text-slate-700">Status</label>
+                    <select className="mt-1 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/35" value={managementForm.status} onChange={(event) => setManagementForm((current) => ({ ...current, status: event.target.value as TicketStatus }))}>
+                      {statusEditorOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-slate-700">Prioridade</label>
+                    <select className="mt-1 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/35" value={managementForm.priority} onChange={(event) => setManagementForm((current) => ({ ...current, priority: event.target.value as TicketPriority }))}>
+                      {priorityEditorOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-slate-700">Previsao de resolucao</label>
+                    <Input type="date" className="mt-1" value={managementForm.dueDate} onChange={(event) => setManagementForm((current) => ({ ...current, dueDate: event.target.value }))} />
+                  </div>
+                  <div className="md:col-span-3">
+                    <Button onClick={() => void handleSaveManagement()} disabled={isSaving}><Save className="mr-2 h-4 w-4" />Salvar gestao</Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
+
+            <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+              <Card className="border-border/70 shadow-card">
+                <CardHeader>
+                  <CardTitle>Comentarios e historico</CardTitle>
+                  <CardDescription>Registre respostas, alinhamentos e observacoes do atendimento.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-3">
+                    {selectedTicket.comments.length ? (
+                      selectedTicket.comments.map((comment) => (
+                        <div key={comment.id} className="rounded-xl border border-border/70 bg-white p-4">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-medium text-slate-900">{comment.authorName}</p>
+                              {comment.isInternal ? (
+                                <Badge variant="warning"><Shield className="mr-1 h-3.5 w-3.5" />Interno</Badge>
+                              ) : null}
+                            </div>
+                            <p className="text-xs text-muted-foreground">{formatDate(comment.createdAt)}</p>
+                          </div>
+                          <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{comment.body}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-border/70 bg-slate-50/70 p-4 text-sm text-muted-foreground">Nenhum comentario registrado neste chamado.</div>
+                    )}
+                  </div>
+
+                  <div className="rounded-2xl border border-border/70 bg-slate-50/70 p-4">
+                    <label className="text-sm font-medium text-slate-700">Novo comentario</label>
+                    <textarea className="mt-2 min-h-[120px] w-full rounded-xl border border-input bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/35" placeholder={isSuperAdmin ? 'Responder ao solicitante ou registrar orientacao interna...' : 'Detalhe a evolucao do chamado ou complemente o contexto...'} value={commentBody} onChange={(event) => setCommentBody(event.target.value)} />
+                    {isSuperAdmin ? (
+                      <label className="mt-3 flex items-center gap-2 text-sm text-slate-700">
+                        <input type="checkbox" checked={commentInternal} onChange={(event) => setCommentInternal(event.target.checked)} />
+                        Comentario interno (nao visivel para o solicitante)
+                      </label>
+                    ) : null}
+                    <div className="mt-3">
+                      <Button onClick={() => void handleAddComment()} disabled={isCommentSaving}><MessageSquare className="mr-2 h-4 w-4" />Adicionar comentario</Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-border/70 shadow-card">
+                <CardHeader>
+                  <CardTitle>Evidencias</CardTitle>
+                  <CardDescription>Arquivos e imagens anexados ao chamado selecionado.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <input ref={fileInputRef} type="file" className="hidden" onChange={(event) => void handleSelectAttachment(event)} />
+                  <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isAttachmentSaving}><Upload className="mr-2 h-4 w-4" />Anexar evidencia</Button>
+
+                  <div className="space-y-3">
+                    {selectedTicket.attachments.length ? (
+                      selectedTicket.attachments.map((attachment) => (
+                        <div key={attachment.id} className="rounded-xl border border-border/70 bg-white p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="truncate font-medium text-slate-900">{attachment.fileName}</p>
+                              <p className="mt-1 text-sm text-muted-foreground">{attachment.uploadedByName} • {formatDate(attachment.createdAt)}</p>
+                              <p className="text-xs text-muted-foreground">{attachment.contentType || 'arquivo'} • {formatFileSize(attachment.sizeBytes)}</p>
+                            </div>
+                            <Button variant="subtle" size="sm" onClick={() => void ticketsApi.downloadAttachment(attachment)}>Baixar</Button>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-border/70 bg-slate-50/70 p-4 text-sm text-muted-foreground">Nenhuma evidencia anexada ate o momento.</div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        ) : (
+          <EmptyState title="Selecione um chamado" description="Escolha um item da fila para ver historico, evidencias e controles do atendimento." icon={CircleDot} />
+        )}
+      </div>
+
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{form.id ? 'Editar chamado' : 'Novo chamado'}</DialogTitle>
+            <DialogDescription>
+              {form.id ? 'Atualize titulo e descricao do chamado selecionado.' : 'Descreva claramente o problema, impacto e contexto da solicitacao.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium text-slate-700">Titulo</label>
+              <Input className="mt-1" value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} placeholder="Ex.: Erro ao atualizar dashboard financeiro" />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700">Descricao</label>
+              <textarea className="mt-1 min-h-[180px] w-full rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/35" value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} placeholder="Detalhe o que aconteceu, impacto para o usuario e passos para reproduzir." />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={() => void handleSaveTicket()} disabled={isSaving}>Salvar chamado</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </section>
+  )
+}
+
+const InfoCard = ({ label, value }: { label: string; value: string }) => (
+  <div className="rounded-xl border border-border/70 bg-white p-4">
+    <p className="text-xs font-semibold uppercase tracking-[0.05em] text-muted-foreground">{label}</p>
+    <p className="mt-2 text-sm font-medium text-slate-900">{value}</p>
+  </div>
+)
+
+const formatFileSize = (bytes: number) => {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+

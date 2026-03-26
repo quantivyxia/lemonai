@@ -81,6 +81,7 @@ INSTALLED_APPS = [
     'apps.workspaces',
     'apps.permissions',
     'apps.audit',
+    'apps.tickets',
     'apps.branding',
     'apps.powerbi',
 ]

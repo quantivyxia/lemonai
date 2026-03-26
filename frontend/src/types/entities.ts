@@ -8,6 +8,8 @@ export type WorkspaceStatus = 'active' | 'inactive' | 'syncing'
 export type RLSRuleType = 'allow' | 'deny'
 export type SystemEventLevel = 'info' | 'warn' | 'error'
 export type SystemEventCategory = 'auth' | 'authorization' | 'admin' | 'integration' | 'system'
+export type TicketStatus = 'open' | 'analysis' | 'in_progress' | 'resolved' | 'closed'
+export type TicketPriority = 'low' | 'medium' | 'high' | 'urgent'
 
 export type Tenant = {
   id: string
@@ -119,6 +121,66 @@ export type AccessLog = {
   status: AccessStatus
   origin: AccessOrigin
   details?: string
+}
+
+export type TicketAttachment = {
+  id: string
+  fileName: string
+  contentType: string
+  sizeBytes: number
+  uploadedBy: string
+  uploadedByName: string
+  createdAt: string
+  downloadUrl: string
+}
+
+export type TicketComment = {
+  id: string
+  author: string
+  authorName: string
+  body: string
+  isInternal: boolean
+  createdAt: string
+}
+
+export type Ticket = {
+  id: string
+  code: string
+  tenantId: string
+  tenantName: string
+  requesterId: string
+  requesterName: string
+  requesterEmail: string
+  title: string
+  description: string
+  status: TicketStatus
+  statusLabel: string
+  priority: TicketPriority
+  priorityLabel: string
+  dueDate?: string | null
+  openedAt: string
+  lastActivityAt: string
+  createdAt: string
+  updatedAt: string
+  commentsCount: number
+  attachmentsCount: number
+  comments: TicketComment[]
+  attachments: TicketAttachment[]
+}
+
+export type TicketNotification = {
+  id: string
+  ticketId: string
+  ticketCode: string
+  ticketTitle: string
+  ticketStatus: TicketStatus
+  notificationType: 'comment' | 'status' | 'update' | 'due_date' | 'attachment'
+  title: string
+  message: string
+  actorName?: string
+  isRead: boolean
+  createdAt: string
+  readAt?: string | null
 }
 
 export type AuditActivity = {

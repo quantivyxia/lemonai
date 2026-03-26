@@ -10,6 +10,11 @@ type RequestOptions = {
   retryOnAuthError?: boolean
 }
 
+type DownloadResult = {
+  blob: Blob
+  fileName: string
+}
+
 const buildUrl = (path: string) => {
   if (path.startsWith('http://') || path.startsWith('https://')) return path
   return `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`
@@ -134,22 +139,7 @@ const refreshAccessToken = async () => {
   return access
 }
 
-export const apiRequest = async <T>(
-  path: string,
-  init: RequestInit = {},
-  options: RequestOptions = {},
-): Promise<T> => {
-  const auth = options.auth ?? true
-  const retryOnAuthError = options.retryOnAuthError ?? true
-  const method = (init.method ?? 'GET').toUpperCase()
-  const url = buildUrl(path)
-
-  const headers = new Headers(init.headers)
-  headers.set('Accept', 'application/json')
-  if (!(init.body instanceof FormData) && !headers.has('Content-Type')) {
-    headers.set('Content-Type', 'application/json')
-  }
-
+const applyAuthHeaders = (headers: Headers, path: string, method: string, auth: boolean) => {
   const token = auth ? sessionStorageService.getAccessToken() : null
   if (token) headers.set('Authorization', `Bearer ${token}`)
   const isAuthenticationRoute = path.startsWith('/authentication/')
@@ -163,6 +153,28 @@ export const apiRequest = async <T>(
   if (viewAsUser?.id) {
     headers.set(VIEW_AS_HEADER, viewAsUser.id)
   }
+
+  return { viewAsUser }
+}
+
+export const apiRequest = async <T>(
+  path: string,
+  init: RequestInit = {},
+  options: RequestOptions = {},
+): Promise<T> => {
+  const auth = options.auth ?? true
+  const retryOnAuthError = options.retryOnAuthError ?? true
+  const method = (init.method ?? 'GET').toUpperCase()
+  const isSafeMethod = method === 'GET' || method === 'HEAD' || method === 'OPTIONS'
+  const url = buildUrl(path)
+
+  const headers = new Headers(init.headers)
+  headers.set('Accept', 'application/json')
+  if (!(init.body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json')
+  }
+
+  const { viewAsUser } = applyAuthHeaders(headers, path, method, auth)
 
   let response: Response
   try {
@@ -233,6 +245,58 @@ export const apiRequest = async <T>(
   }
 
   return payload as T
+}
+
+const resolveDownloadFileName = (contentDisposition: string | null, fallback: string) => {
+  if (!contentDisposition) return fallback
+
+  const utf8Match = contentDisposition.match(/filename\\*=UTF-8''([^;]+)/i)
+  if (utf8Match?.[1]) {
+    return decodeURIComponent(utf8Match[1])
+  }
+
+  const basicMatch = contentDisposition.match(/filename=\"?([^\";]+)\"?/i)
+  return basicMatch?.[1] ?? fallback
+}
+
+export const apiDownload = async (
+  path: string,
+  init: RequestInit = {},
+  options: RequestOptions = {},
+): Promise<DownloadResult> => {
+  const auth = options.auth ?? true
+  const retryOnAuthError = options.retryOnAuthError ?? true
+  const method = (init.method ?? 'GET').toUpperCase()
+  const url = buildUrl(path)
+
+  const headers = new Headers(init.headers)
+  headers.set('Accept', '*/*')
+  applyAuthHeaders(headers, path, method, auth)
+
+  let response: Response
+  try {
+    response = await fetchWithTimeout(url, { ...init, headers })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : NETWORK_ERROR_MESSAGE
+    throw new Error(message === TIMEOUT_ERROR_MESSAGE ? message : NETWORK_ERROR_MESSAGE)
+  }
+
+  if (response.status === 401 && auth && retryOnAuthError) {
+    const refreshedToken = await refreshAccessToken()
+    if (refreshedToken) {
+      headers.set('Authorization', `Bearer ${refreshedToken}`)
+      response = await fetchWithTimeout(url, { ...init, headers })
+    }
+  }
+
+  if (!response.ok) {
+    const payload = await parseBody(response)
+    throw new Error(resolveErrorMessage(payload, response.status))
+  }
+
+  const blob = await response.blob()
+  const fileName = resolveDownloadFileName(response.headers.get('Content-Disposition'), 'download')
+  return { blob, fileName }
 }
 
 export const apiList = async <T>(path: string): Promise<T[]> => {

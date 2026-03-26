@@ -40,6 +40,7 @@ const WorkspacesPage = lazyPage(
   () => import('@/features/reports/pages/workspaces-page'),
   'WorkspacesPage',
 )
+const TicketsPage = lazyPage(() => import('@/features/tickets/pages/tickets-page'), 'TicketsPage')
 const PowerBIPage = lazyPage(() => import('@/features/powerbi/pages/powerbi-page'), 'PowerBIPage')
 const BrandingPage = lazyPage(() => import('@/features/settings/pages/branding-page'), 'BrandingPage')
 const PlatformSettingsPage = lazyPage(
@@ -162,6 +163,14 @@ export const appRouter = createBrowserRouter([
             element: (
               <RoleRoute allowedRoles={[...nonViewerRoles]}>
                 {withSuspense(<PowerBIPage />)}
+              </RoleRoute>
+            ),
+          },
+          {
+            path: 'tickets',
+            element: (
+              <RoleRoute allowedRoles={[...nonViewerRoles]}>
+                {withSuspense(<TicketsPage />)}
               </RoleRoute>
             ),
           },

@@ -16,6 +16,7 @@ urlpatterns = [
     path('api/workspaces/', include('apps.workspaces.urls')),
     path('api/permissions/', include('apps.permissions.urls')),
     path('api/audit/', include('apps.audit.urls')),
+    path('api/tickets/', include('apps.tickets.urls')),
     path('api/branding/', include('apps.branding.urls')),
     path('api/powerbi/', include('apps.powerbi.urls')),
 ]
