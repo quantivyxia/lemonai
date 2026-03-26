@@ -150,7 +150,13 @@ export const TicketsPage = () => {
   const [isCommentSaving, setIsCommentSaving] = useState(false)
   const [isAttachmentSaving, setIsAttachmentSaving] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const createEvidenceInputRef = useRef<HTMLInputElement | null>(null)
   const selectedTicketId = searchParams.get('ticket')
+  const [createEvidenceFile, setCreateEvidenceFile] = useState<File | null>(null)
+  const resetCreateEvidence = useCallback(() => {
+    setCreateEvidenceFile(null)
+    if (createEvidenceInputRef.current) createEvidenceInputRef.current.value = ''
+  }, [])
 
   const scopedUsers = useMemo(() => filterByTenant(users, (item) => ({ tenantId: item.tenantId })), [filterByTenant, users])
   const scopedTenants = useMemo(() => filterByTenant(tenants, (item) => ({ tenantId: item.id })), [filterByTenant, tenants])
@@ -201,7 +207,7 @@ export const TicketsPage = () => {
           setTicketQuery(null)
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Nao foi possivel carregar os chamados.'
+        const message = error instanceof Error ? error.message : 'Nao foi possivel carregar o suporte.'
         toast.error(message)
       } finally {
         setIsLoading(false)
@@ -258,7 +264,7 @@ export const TicketsPage = () => {
 
     return [
       {
-        title: isSuperAdmin ? 'Total de chamados' : 'Meus chamados',
+        title: isSuperAdmin ? 'Total de atendimentos' : 'Meus atendimentos',
         value: formatNumber(tickets.length),
         description: 'Volume no recorte filtrado atual.',
         icon: TicketIcon,
@@ -266,13 +272,13 @@ export const TicketsPage = () => {
       {
         title: 'Pendentes',
         value: formatNumber(tickets.filter((ticket) => isPendingTicket(ticket.status)).length),
-        description: 'Chamados abertos, em analise ou em andamento.',
+        description: 'Atendimentos abertos, em analise ou em andamento.',
         icon: Clock3,
       },
       {
         title: 'Prazo vencido',
         value: formatNumber(overdue),
-        description: 'Chamados com previsao ultrapassada e sem fechamento.',
+        description: 'Atendimentos com previsao ultrapassada e sem fechamento.',
         icon: CalendarClock,
       },
       {
@@ -286,33 +292,50 @@ export const TicketsPage = () => {
 
   const openCreateDialog = () => {
     setForm({ title: '', description: '' })
+    resetCreateEvidence()
     setIsDialogOpen(true)
   }
 
   const openEditDialog = () => {
     if (!selectedTicket) return
     setForm({ id: selectedTicket.id, title: selectedTicket.title, description: selectedTicket.description })
+    resetCreateEvidence()
     setIsDialogOpen(true)
   }
 
   const handleSaveTicket = async () => {
     if (!form.title.trim()) {
-      toast.error('Preencha o titulo do chamado.')
+      toast.error('Preencha o titulo do suporte.')
       return
     }
     if (!form.description.trim()) {
-      toast.error('Descreva o chamado com mais detalhe.')
+      toast.error('Descreva o suporte com mais detalhe.')
       return
     }
 
     setIsSaving(true)
     try {
       const saved = await ticketsApi.upsertTicket({ id: form.id, title: form.title.trim(), description: form.description.trim() })
+      let evidenceUploadError: string | null = null
+
+      if (createEvidenceFile) {
+        try {
+          await ticketsApi.uploadAttachment(saved.id, createEvidenceFile)
+        } catch (error) {
+          evidenceUploadError = error instanceof Error ? error.message : 'Nao foi possivel anexar a imagem.'
+        }
+      }
+
       await loadTickets({ preferredTicketId: saved.id })
+      resetCreateEvidence()
       setIsDialogOpen(false)
-      toast.success(form.id ? 'Chamado atualizado.' : 'Chamado criado com sucesso.')
+      if (evidenceUploadError) {
+        toast.warning(`${form.id ? 'Suporte salvo' : 'Suporte criado'}, mas a imagem nao foi anexada: ${evidenceUploadError}`)
+      } else {
+        toast.success(form.id ? 'Suporte atualizado.' : 'Suporte criado com sucesso.')
+      }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Nao foi possivel salvar o chamado.')
+      toast.error(error instanceof Error ? error.message : 'Nao foi possivel salvar o suporte.')
     } finally {
       setIsSaving(false)
     }
@@ -332,9 +355,9 @@ export const TicketsPage = () => {
         due_date: managementForm.dueDate || null,
       })
       await loadTickets({ preferredTicketId: selectedTicket.id })
-      toast.success('Gestao do chamado atualizada.')
+      toast.success('Gestao do suporte atualizada.')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Nao foi possivel atualizar o chamado.')
+      toast.error(error instanceof Error ? error.message : 'Nao foi possivel atualizar o suporte.')
     } finally {
       setIsSaving(false)
     }
@@ -381,6 +404,11 @@ export const TicketsPage = () => {
     }
   }
 
+  const handleCreateEvidenceChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null
+    setCreateEvidenceFile(file)
+  }
+
   const canCreateTicket = user?.role === 'analyst'
   const canEditBasics = Boolean(
     selectedTicket && (isSuperAdmin || (user?.role === 'analyst' && selectedTicket.requesterId === user?.id)),
@@ -389,8 +417,8 @@ export const TicketsPage = () => {
   return (
     <section className="animate-fade-in">
       <PageHeader
-        title="Chamados"
-        description="Operacao de suporte com historico, evidencias e acompanhamento por status."
+        title="Suporte"
+        description="Atendimentos com historico, evidencias e acompanhamento por status."
         actions={
           <>
             <Button variant="outline" onClick={() => void loadTickets({ currentSelectedTicketId: selectedTicketId })}>
@@ -400,7 +428,7 @@ export const TicketsPage = () => {
             {canCreateTicket ? (
               <Button onClick={openCreateDialog}>
                 <Plus className="mr-2 h-4 w-4" />
-                Novo chamado
+                Novo suporte
               </Button>
             ) : null}
           </>
@@ -408,26 +436,34 @@ export const TicketsPage = () => {
       />
 
       <Card className="border-border/70 shadow-card">
-        <CardHeader>
-          <CardTitle>Filtros de chamados</CardTitle>
-          <CardDescription>Os indicadores, a lista e o painel lateral obedecem ao mesmo recorte.</CardDescription>
+        <CardHeader className="pb-2">
+          <CardTitle>Filtros de suporte</CardTitle>
+          <CardDescription>Recorte compartilhado entre indicadores e fila.</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3 xl:grid-cols-5">
+        <CardContent className="flex flex-wrap items-center gap-2 pt-0">
           {isSuperAdmin ? (
-            <SearchableSelect value={filters.tenant} onValueChange={(value) => setFilters((current) => ({ ...current, tenant: value }))} options={tenantOptions} placeholder="Tenant" searchPlaceholder="Pesquisar tenant" />
+            <div className="w-full min-w-[200px] md:w-[220px]">
+              <SearchableSelect value={filters.tenant} onValueChange={(value) => setFilters((current) => ({ ...current, tenant: value }))} options={tenantOptions} placeholder="Tenant" searchPlaceholder="Pesquisar tenant" />
+            </div>
           ) : (
-            <Input value={userTenantName ?? 'Tenant atual'} disabled />
+            <Input className="w-full min-w-[200px] md:w-[220px]" value={userTenantName ?? 'Tenant atual'} disabled />
           )}
           {isSuperAdmin ? (
-            <SearchableSelect value={filters.requester} onValueChange={(value) => setFilters((current) => ({ ...current, requester: value }))} options={requesterOptions} placeholder="Solicitante" searchPlaceholder="Pesquisar solicitante" />
+            <div className="w-full min-w-[220px] md:w-[240px]">
+              <SearchableSelect value={filters.requester} onValueChange={(value) => setFilters((current) => ({ ...current, requester: value }))} options={requesterOptions} placeholder="Solicitante" searchPlaceholder="Pesquisar solicitante" />
+            </div>
           ) : null}
-          <SearchableSelect value={filters.status} onValueChange={(value) => setFilters((current) => ({ ...current, status: value }))} options={statusOptions} placeholder="Status" searchPlaceholder="Pesquisar status" />
-          <SearchableSelect value={filters.priority} onValueChange={(value) => setFilters((current) => ({ ...current, priority: value }))} options={priorityOptions} placeholder="Prioridade" searchPlaceholder="Pesquisar prioridade" />
-          <div className={cn('relative', isSuperAdmin ? 'xl:col-span-2' : 'xl:col-span-3')}>
-            <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input className="pl-9" placeholder="Buscar por codigo, titulo, descricao ou solicitante" value={filters.search} onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))} />
+          <div className="w-full min-w-[200px] md:w-[220px]">
+            <SearchableSelect value={filters.status} onValueChange={(value) => setFilters((current) => ({ ...current, status: value }))} options={statusOptions} placeholder="Status" searchPlaceholder="Pesquisar status" />
           </div>
-          <Button onClick={() => setAppliedFilters(filters)}>Aplicar filtros</Button>
+          <div className="w-full min-w-[200px] md:w-[220px]">
+            <SearchableSelect value={filters.priority} onValueChange={(value) => setFilters((current) => ({ ...current, priority: value }))} options={priorityOptions} placeholder="Prioridade" searchPlaceholder="Pesquisar prioridade" />
+          </div>
+          <div className="relative min-w-[280px] flex-1">
+            <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input className="pl-9" placeholder="Buscar por codigo, titulo ou solicitante" value={filters.search} onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))} />
+          </div>
+          <Button className="w-full md:w-[148px]" onClick={() => setAppliedFilters(filters)}>Aplicar</Button>
         </CardContent>
       </Card>
 
@@ -455,9 +491,9 @@ export const TicketsPage = () => {
 
       <div className="mt-4 grid gap-4 xl:grid-cols-[0.95fr_1.25fr]">
         <Card className="border-border/70 shadow-card">
-          <CardHeader className="pb-3">
-            <CardTitle>Fila de chamados</CardTitle>
-            <CardDescription>{isSuperAdmin ? 'Visao global dos chamados do portal.' : 'Apenas os chamados abertos por voce.'}</CardDescription>
+            <CardHeader className="pb-3">
+            <CardTitle>Fila de suporte</CardTitle>
+            <CardDescription>{isSuperAdmin ? 'Visao global dos atendimentos do portal.' : 'Apenas os atendimentos abertos por voce.'}</CardDescription>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -498,7 +534,7 @@ export const TicketsPage = () => {
                 })}
               </div>
             ) : (
-              <EmptyState title="Nenhum chamado encontrado" description="Ajuste os filtros ou abra o primeiro chamado para iniciar o atendimento." icon={LifeBuoy} actionLabel={canCreateTicket ? 'Novo chamado' : undefined} onAction={canCreateTicket ? openCreateDialog : undefined} />
+              <EmptyState title="Nenhum atendimento encontrado" description="Ajuste os filtros ou abra o primeiro suporte para iniciar o atendimento." icon={LifeBuoy} actionLabel={canCreateTicket ? 'Novo suporte' : undefined} onAction={canCreateTicket ? openCreateDialog : undefined} />
             )}
           </CardContent>
         </Card>
@@ -515,7 +551,7 @@ export const TicketsPage = () => {
                     </CardTitle>
                     <CardDescription className="mt-1">{selectedTicket.code} • aberto em {formatDate(selectedTicket.openedAt)}</CardDescription>
                   </div>
-                  {canEditBasics ? <Button variant="outline" size="sm" onClick={openEditDialog}>Editar chamado</Button> : null}
+                  {canEditBasics ? <Button variant="outline" size="sm" onClick={openEditDialog}>Editar suporte</Button> : null}
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -534,7 +570,7 @@ export const TicketsPage = () => {
               <Card className="border-border/70 shadow-card">
                 <CardHeader>
                   <CardTitle>Gestao administrativa</CardTitle>
-                  <CardDescription>Atualize status, prioridade e previsao de resolucao do chamado selecionado.</CardDescription>
+                  <CardDescription>Atualize status, prioridade e previsao de resolucao do atendimento selecionado.</CardDescription>
                 </CardHeader>
                 <CardContent className="grid gap-3 md:grid-cols-3">
                   <div>
@@ -584,13 +620,13 @@ export const TicketsPage = () => {
                         </div>
                       ))
                     ) : (
-                      <div className="rounded-xl border border-dashed border-border/70 bg-slate-50/70 p-4 text-sm text-muted-foreground">Nenhum comentario registrado neste chamado.</div>
+                      <div className="rounded-xl border border-dashed border-border/70 bg-slate-50/70 p-4 text-sm text-muted-foreground">Nenhum comentario registrado neste atendimento.</div>
                     )}
                   </div>
 
                   <div className="rounded-2xl border border-border/70 bg-slate-50/70 p-4">
                     <label className="text-sm font-medium text-slate-700">Novo comentario</label>
-                    <textarea className="mt-2 min-h-[120px] w-full rounded-xl border border-input bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/35" placeholder={isSuperAdmin ? 'Responder ao solicitante ou registrar orientacao interna...' : 'Detalhe a evolucao do chamado ou complemente o contexto...'} value={commentBody} onChange={(event) => setCommentBody(event.target.value)} />
+                    <textarea className="mt-2 min-h-[120px] w-full rounded-xl border border-input bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/35" placeholder={isSuperAdmin ? 'Responder ao solicitante ou registrar orientacao interna...' : 'Detalhe a evolucao do atendimento ou complemente o contexto...'} value={commentBody} onChange={(event) => setCommentBody(event.target.value)} />
                     {isSuperAdmin ? (
                       <label className="mt-3 flex items-center gap-2 text-sm text-slate-700">
                         <input type="checkbox" checked={commentInternal} onChange={(event) => setCommentInternal(event.target.checked)} />
@@ -607,7 +643,7 @@ export const TicketsPage = () => {
               <Card className="border-border/70 shadow-card">
                 <CardHeader>
                   <CardTitle>Evidencias</CardTitle>
-                  <CardDescription>Arquivos e imagens anexados ao chamado selecionado.</CardDescription>
+                  <CardDescription>Arquivos e imagens anexados ao atendimento selecionado.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <input ref={fileInputRef} type="file" className="hidden" onChange={(event) => void handleSelectAttachment(event)} />
@@ -636,16 +672,19 @@ export const TicketsPage = () => {
             </div>
           </div>
         ) : (
-          <EmptyState title="Selecione um chamado" description="Escolha um item da fila para ver historico, evidencias e controles do atendimento." icon={CircleDot} />
+          <EmptyState title="Selecione um atendimento" description="Escolha um item da fila para ver historico, evidencias e controles do atendimento." icon={CircleDot} />
         )}
       </div>
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      <Dialog open={isDialogOpen} onOpenChange={(open) => {
+        setIsDialogOpen(open)
+        if (!open) resetCreateEvidence()
+      }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{form.id ? 'Editar chamado' : 'Novo chamado'}</DialogTitle>
+            <DialogTitle>{form.id ? 'Editar suporte' : 'Novo suporte'}</DialogTitle>
             <DialogDescription>
-              {form.id ? 'Atualize titulo e descricao do chamado selecionado.' : 'Descreva claramente o problema, impacto e contexto da solicitacao.'}
+              {form.id ? 'Atualize titulo, descricao e a imagem do atendimento selecionado.' : 'Descreva claramente o problema, impacto e contexto da solicitacao.'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -657,10 +696,23 @@ export const TicketsPage = () => {
               <label className="text-sm font-medium text-slate-700">Descricao</label>
               <textarea className="mt-1 min-h-[180px] w-full rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/35" value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} placeholder="Detalhe o que aconteceu, impacto para o usuario e passos para reproduzir." />
             </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700">Imagem de comprovacao</label>
+              <input ref={createEvidenceInputRef} type="file" accept="image/*" className="hidden" onChange={handleCreateEvidenceChange} />
+              <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-border/70 bg-slate-50/70 p-3">
+                <Button type="button" variant="outline" onClick={() => createEvidenceInputRef.current?.click()}>
+                  <Upload className="mr-2 h-4 w-4" />
+                  Selecionar imagem
+                </Button>
+                <p className="text-sm text-muted-foreground">
+                  {createEvidenceFile ? createEvidenceFile.name : 'Opcional. Use uma captura para comprovar o problema.'}
+                </p>
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={() => void handleSaveTicket()} disabled={isSaving}>Salvar chamado</Button>
+            <Button onClick={() => void handleSaveTicket()} disabled={isSaving}>Salvar suporte</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

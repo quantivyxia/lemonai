@@ -120,6 +120,10 @@ class TicketSerializer(serializers.ModelSerializer):
             'status_label',
             'priority_label',
         ]
+        extra_kwargs = {
+            'tenant': {'required': False},
+            'due_date': {'required': False, 'allow_null': True},
+        }
 
     def get_comments(self, obj):
         request = self.context.get('request')

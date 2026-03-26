@@ -25,7 +25,7 @@ const mapPathToTitle: Record<string, string> = {
   '/dashboards': 'Gestao de Dashboards',
   '/workspaces': 'Gestao de Workspaces',
   '/powerbi': 'Power BI Embedded',
-  '/tickets': 'Chamados',
+  '/tickets': 'Suporte',
   '/users': 'Gestao de Usuarios',
   '/tenants': 'Gestao de Tenants',
   '/groups': 'Gestao de Grupos',
@@ -60,7 +60,7 @@ export const Topbar = ({ onMobileMenuOpen }: { onMobileMenuOpen: () => void }) =
       setNotifications(payload.notifications)
       setUnreadCount(payload.unreadCount)
     } catch (error) {
-      appLogger.warn('Falha ao carregar notificacoes de chamados', {
+      appLogger.warn('Falha ao carregar notificacoes de suporte', {
         message: error instanceof Error ? error.message : 'unknown',
       })
     }
@@ -142,7 +142,7 @@ export const Topbar = ({ onMobileMenuOpen }: { onMobileMenuOpen: () => void }) =
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-[360px]">
                 <div className="flex items-center justify-between px-2 py-1.5">
-                  <DropdownMenuLabel className="p-0">Chamados</DropdownMenuLabel>
+                  <DropdownMenuLabel className="p-0">Suporte</DropdownMenuLabel>
                   {unreadCount > 0 ? (
                     <Button
                       variant="ghost"
@@ -185,7 +185,7 @@ export const Topbar = ({ onMobileMenuOpen }: { onMobileMenuOpen: () => void }) =
                   ))
                 ) : (
                   <div className="px-3 py-5 text-sm text-muted-foreground">
-                    Nenhuma atualizacao de chamado pendente.
+                    Nenhuma atualizacao de suporte pendente.
                   </div>
                 )}
               </DropdownMenuContent>
