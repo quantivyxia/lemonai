@@ -1,6 +1,5 @@
-﻿import {
+import {
   CalendarClock,
-  CircleDot,
   Clock3,
   LifeBuoy,
   MessageSquare,
@@ -36,7 +35,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useAuth } from '@/hooks/use-auth'
 import { usePlatformStore } from '@/hooks/use-platform-store'
 import { useTenantScope } from '@/hooks/use-tenant-scope'
-import { cn, formatDate, formatNumber } from '@/lib/utils'
+import { formatDate, formatNumber } from '@/lib/utils'
 import { ticketsApi } from '@/services/tickets-api'
 import type { Ticket, TicketPriority, TicketStatus } from '@/types/entities'
 
@@ -201,9 +200,7 @@ export const TicketsPage = () => {
         const targetTicketId = options?.preferredTicketId ?? options?.currentSelectedTicketId ?? null
         if (targetTicketId && data.some((item) => item.id === targetTicketId)) {
           setTicketQuery(targetTicketId)
-        } else if (data[0]) {
-          setTicketQuery(data[0].id)
-        } else {
+        } else if (targetTicketId) {
           setTicketQuery(null)
         }
       } catch (error) {
@@ -489,73 +486,86 @@ export const TicketsPage = () => {
         })}
       </div>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[0.95fr_1.25fr]">
+      <div className="mt-4">
         <Card className="border-border/70 shadow-card">
-            <CardHeader className="pb-3">
+          <CardHeader className="pb-3">
             <CardTitle>Fila de suporte</CardTitle>
             <CardDescription>{isSuperAdmin ? 'Visao global dos atendimentos do portal.' : 'Apenas os atendimentos abertos por voce.'}</CardDescription>
           </CardHeader>
           <CardContent>
             {isLoading ? (
               <div className="space-y-3">
-                {Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} className="h-28 rounded-xl" />)}
+                {Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} className="h-32 rounded-xl" />)}
               </div>
             ) : tickets.length ? (
               <div className="space-y-3">
-                {tickets.map((ticket) => {
-                  const isSelected = ticket.id === selectedTicketId
-                  return (
-                    <button key={ticket.id} type="button" onClick={() => setTicketQuery(ticket.id)} className={cn('w-full rounded-2xl border p-4 text-left transition', isSelected ? 'border-primary/45 bg-primary/5 shadow-card' : 'border-border/70 bg-white hover:border-primary/30 hover:bg-slate-50/70')}>
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div className="space-y-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="font-semibold text-slate-900">{ticket.title}</p>
-                            <Badge variant={statusVariantMap[ticket.status]}>{ticket.statusLabel}</Badge>
-                            <Badge variant={priorityVariantMap[ticket.priority]}>{ticket.priorityLabel}</Badge>
-                          </div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">{ticket.code}</p>
+                {tickets.map((ticket) => (
+                  <div key={ticket.id} className="rounded-2xl border border-border/70 bg-white p-4 shadow-card">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-semibold text-slate-900">{ticket.title}</p>
+                          <Badge variant={statusVariantMap[ticket.status]}>{ticket.statusLabel}</Badge>
+                          <Badge variant={priorityVariantMap[ticket.priority]}>{ticket.priorityLabel}</Badge>
                         </div>
-                        <p className="text-xs text-muted-foreground">{formatDate(ticket.lastActivityAt)}</p>
+                        <p className="text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">{ticket.code}</p>
                       </div>
+                      <p className="text-xs text-muted-foreground">{formatDate(ticket.lastActivityAt)}</p>
+                    </div>
 
-                      <p className="mt-3 line-clamp-2 text-sm text-slate-700">{ticket.description}</p>
+                    <p className="mt-3 line-clamp-2 text-sm text-slate-700">{ticket.description}</p>
 
-                      <div className="mt-3 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
-                        <div><span className="font-medium text-slate-700">Solicitante:</span> {ticket.requesterName}</div>
-                        <div><span className="font-medium text-slate-700">Tenant:</span> {ticket.tenantName}</div>
-                        <div><span className="font-medium text-slate-700">Previsao:</span> {formatDateOnly(ticket.dueDate)}</div>
-                        <div className="flex items-center gap-3">
-                          <span className="inline-flex items-center gap-1"><MessageSquare className="h-3.5 w-3.5" />{formatNumber(ticket.commentsCount)}</span>
-                          <span className="inline-flex items-center gap-1"><Paperclip className="h-3.5 w-3.5" />{formatNumber(ticket.attachmentsCount)}</span>
-                        </div>
+                    <div className="mt-4 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
+                      <div><span className="font-medium text-slate-700">Solicitante:</span> {ticket.requesterName}</div>
+                      <div><span className="font-medium text-slate-700">Tenant:</span> {ticket.tenantName}</div>
+                      <div><span className="font-medium text-slate-700">Previsao:</span> {formatDateOnly(ticket.dueDate)}</div>
+                      <div className="flex items-center gap-3">
+                        <span className="inline-flex items-center gap-1"><MessageSquare className="h-3.5 w-3.5" />{formatNumber(ticket.commentsCount)}</span>
+                        <span className="inline-flex items-center gap-1"><Paperclip className="h-3.5 w-3.5" />{formatNumber(ticket.attachmentsCount)}</span>
                       </div>
-                    </button>
-                  )
-                })}
+                    </div>
+
+                    <div className="mt-4 flex justify-end">
+                      <Button variant="outline" size="sm" onClick={() => setTicketQuery(ticket.id)}>
+                        Detalhes
+                      </Button>
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : (
               <EmptyState title="Nenhum atendimento encontrado" description="Ajuste os filtros ou abra o primeiro suporte para iniciar o atendimento." icon={LifeBuoy} actionLabel={canCreateTicket ? 'Novo suporte' : undefined} onAction={canCreateTicket ? openCreateDialog : undefined} />
             )}
           </CardContent>
         </Card>
+      </div>
 
-        {selectedTicket ? (
-          <div className="space-y-4">
-            <Card className="border-border/70 shadow-card">
-              <CardHeader className="pb-3">
+      <Dialog open={Boolean(selectedTicket)} onOpenChange={(open) => {
+        if (!open) setTicketQuery(null)
+      }}>
+        <DialogContent className="max-h-[88vh] max-w-6xl overflow-y-auto">
+          {selectedTicket ? (
+            <>
+              <DialogHeader>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <CardTitle className="flex items-center gap-2">
+                    <DialogTitle className="flex flex-wrap items-center gap-2">
                       {selectedTicket.title}
                       <Badge variant={statusVariantMap[selectedTicket.status]}>{selectedTicket.statusLabel}</Badge>
-                    </CardTitle>
-                    <CardDescription className="mt-1">{selectedTicket.code} • aberto em {formatDate(selectedTicket.openedAt)}</CardDescription>
+                      <Badge variant={priorityVariantMap[selectedTicket.priority]}>{selectedTicket.priorityLabel}</Badge>
+                    </DialogTitle>
+                    <DialogDescription className="mt-1">
+                      {selectedTicket.code} • aberto em {formatDate(selectedTicket.openedAt)}
+                    </DialogDescription>
                   </div>
                   {canEditBasics ? <Button variant="outline" size="sm" onClick={openEditDialog}>Editar suporte</Button> : null}
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="rounded-xl border border-border/70 bg-slate-50/70 p-4 text-sm text-slate-700">{selectedTicket.description}</div>
+              </DialogHeader>
+
+              <div className="space-y-4">
+                <div className="rounded-xl border border-border/70 bg-slate-50/70 p-4 text-sm text-slate-700">
+                  {selectedTicket.description}
+                </div>
 
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                   <InfoCard label="Solicitante" value={selectedTicket.requesterName} />
@@ -563,118 +573,127 @@ export const TicketsPage = () => {
                   <InfoCard label="Ultima atividade" value={formatDate(selectedTicket.lastActivityAt)} />
                   <InfoCard label="Previsao" value={formatDateOnly(selectedTicket.dueDate)} />
                 </div>
-              </CardContent>
-            </Card>
 
-            {isSuperAdmin ? (
-              <Card className="border-border/70 shadow-card">
-                <CardHeader>
-                  <CardTitle>Gestao administrativa</CardTitle>
-                  <CardDescription>Atualize status, prioridade e previsao de resolucao do atendimento selecionado.</CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-3 md:grid-cols-3">
-                  <div>
-                    <label className="text-sm font-medium text-slate-700">Status</label>
-                    <select className="mt-1 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/35" value={managementForm.status} onChange={(event) => setManagementForm((current) => ({ ...current, status: event.target.value as TicketStatus }))}>
-                      {statusEditorOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-slate-700">Prioridade</label>
-                    <select className="mt-1 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/35" value={managementForm.priority} onChange={(event) => setManagementForm((current) => ({ ...current, priority: event.target.value as TicketPriority }))}>
-                      {priorityEditorOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-slate-700">Previsao de resolucao</label>
-                    <Input type="date" className="mt-1" value={managementForm.dueDate} onChange={(event) => setManagementForm((current) => ({ ...current, dueDate: event.target.value }))} />
-                  </div>
-                  <div className="md:col-span-3">
-                    <Button onClick={() => void handleSaveManagement()} disabled={isSaving}><Save className="mr-2 h-4 w-4" />Salvar gestao</Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ) : null}
+                {isSuperAdmin ? (
+                  <Card className="border-border/70 shadow-card">
+                    <CardHeader>
+                      <CardTitle>Gestao administrativa</CardTitle>
+                      <CardDescription>Atualize status, prioridade e previsao de resolucao do atendimento selecionado.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="grid gap-3 md:grid-cols-3">
+                      <div>
+                        <label className="text-sm font-medium text-slate-700">Status</label>
+                        <select className="mt-1 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/35" value={managementForm.status} onChange={(event) => setManagementForm((current) => ({ ...current, status: event.target.value as TicketStatus }))}>
+                          {statusEditorOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-slate-700">Prioridade</label>
+                        <select className="mt-1 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/35" value={managementForm.priority} onChange={(event) => setManagementForm((current) => ({ ...current, priority: event.target.value as TicketPriority }))}>
+                          {priorityEditorOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-slate-700">Previsao de resolucao</label>
+                        <Input type="date" className="mt-1" value={managementForm.dueDate} onChange={(event) => setManagementForm((current) => ({ ...current, dueDate: event.target.value }))} />
+                      </div>
+                      <div className="md:col-span-3">
+                        <Button onClick={() => void handleSaveManagement()} disabled={isSaving}>
+                          <Save className="mr-2 h-4 w-4" />
+                          Salvar gestao
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : null}
 
-            <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-              <Card className="border-border/70 shadow-card">
-                <CardHeader>
-                  <CardTitle>Comentarios e historico</CardTitle>
-                  <CardDescription>Registre respostas, alinhamentos e observacoes do atendimento.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-3">
-                    {selectedTicket.comments.length ? (
-                      selectedTicket.comments.map((comment) => (
-                        <div key={comment.id} className="rounded-xl border border-border/70 bg-white p-4">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="font-medium text-slate-900">{comment.authorName}</p>
-                              {comment.isInternal ? (
-                                <Badge variant="warning"><Shield className="mr-1 h-3.5 w-3.5" />Interno</Badge>
-                              ) : null}
+                <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+                  <Card className="border-border/70 shadow-card">
+                    <CardHeader>
+                      <CardTitle>Comentarios e historico</CardTitle>
+                      <CardDescription>Registre respostas, alinhamentos e observacoes do atendimento.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-3">
+                        {selectedTicket.comments.length ? (
+                          selectedTicket.comments.map((comment) => (
+                            <div key={comment.id} className="rounded-xl border border-border/70 bg-white p-4">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="font-medium text-slate-900">{comment.authorName}</p>
+                                  {comment.isInternal ? (
+                                    <Badge variant="warning"><Shield className="mr-1 h-3.5 w-3.5" />Interno</Badge>
+                                  ) : null}
+                                </div>
+                                <p className="text-xs text-muted-foreground">{formatDate(comment.createdAt)}</p>
+                              </div>
+                              <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{comment.body}</p>
                             </div>
-                            <p className="text-xs text-muted-foreground">{formatDate(comment.createdAt)}</p>
-                          </div>
-                          <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{comment.body}</p>
+                          ))
+                        ) : (
+                          <div className="rounded-xl border border-dashed border-border/70 bg-slate-50/70 p-4 text-sm text-muted-foreground">Nenhum comentario registrado neste atendimento.</div>
+                        )}
+                      </div>
+
+                      <div className="rounded-2xl border border-border/70 bg-slate-50/70 p-4">
+                        <label className="text-sm font-medium text-slate-700">Novo comentario</label>
+                        <textarea className="mt-2 min-h-[120px] w-full rounded-xl border border-input bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/35" placeholder={isSuperAdmin ? 'Responder ao solicitante ou registrar orientacao interna...' : 'Detalhe a evolucao do atendimento ou complemente o contexto...'} value={commentBody} onChange={(event) => setCommentBody(event.target.value)} />
+                        {isSuperAdmin ? (
+                          <label className="mt-3 flex items-center gap-2 text-sm text-slate-700">
+                            <input type="checkbox" checked={commentInternal} onChange={(event) => setCommentInternal(event.target.checked)} />
+                            Comentario interno (nao visivel para o solicitante)
+                          </label>
+                        ) : null}
+                        <div className="mt-3">
+                          <Button onClick={() => void handleAddComment()} disabled={isCommentSaving}>
+                            <MessageSquare className="mr-2 h-4 w-4" />
+                            Adicionar comentario
+                          </Button>
                         </div>
-                      ))
-                    ) : (
-                      <div className="rounded-xl border border-dashed border-border/70 bg-slate-50/70 p-4 text-sm text-muted-foreground">Nenhum comentario registrado neste atendimento.</div>
-                    )}
-                  </div>
+                      </div>
+                    </CardContent>
+                  </Card>
 
-                  <div className="rounded-2xl border border-border/70 bg-slate-50/70 p-4">
-                    <label className="text-sm font-medium text-slate-700">Novo comentario</label>
-                    <textarea className="mt-2 min-h-[120px] w-full rounded-xl border border-input bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/35" placeholder={isSuperAdmin ? 'Responder ao solicitante ou registrar orientacao interna...' : 'Detalhe a evolucao do atendimento ou complemente o contexto...'} value={commentBody} onChange={(event) => setCommentBody(event.target.value)} />
-                    {isSuperAdmin ? (
-                      <label className="mt-3 flex items-center gap-2 text-sm text-slate-700">
-                        <input type="checkbox" checked={commentInternal} onChange={(event) => setCommentInternal(event.target.checked)} />
-                        Comentario interno (nao visivel para o solicitante)
-                      </label>
-                    ) : null}
-                    <div className="mt-3">
-                      <Button onClick={() => void handleAddComment()} disabled={isCommentSaving}><MessageSquare className="mr-2 h-4 w-4" />Adicionar comentario</Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  <Card className="border-border/70 shadow-card">
+                    <CardHeader>
+                      <CardTitle>Evidencias</CardTitle>
+                      <CardDescription>Arquivos e imagens anexados ao atendimento selecionado.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <input ref={fileInputRef} type="file" className="hidden" onChange={(event) => void handleSelectAttachment(event)} />
+                      <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isAttachmentSaving}>
+                        <Upload className="mr-2 h-4 w-4" />
+                        Anexar evidencia
+                      </Button>
 
-              <Card className="border-border/70 shadow-card">
-                <CardHeader>
-                  <CardTitle>Evidencias</CardTitle>
-                  <CardDescription>Arquivos e imagens anexados ao atendimento selecionado.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <input ref={fileInputRef} type="file" className="hidden" onChange={(event) => void handleSelectAttachment(event)} />
-                  <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isAttachmentSaving}><Upload className="mr-2 h-4 w-4" />Anexar evidencia</Button>
-
-                  <div className="space-y-3">
-                    {selectedTicket.attachments.length ? (
-                      selectedTicket.attachments.map((attachment) => (
-                        <div key={attachment.id} className="rounded-xl border border-border/70 bg-white p-4">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="truncate font-medium text-slate-900">{attachment.fileName}</p>
-                              <p className="mt-1 text-sm text-muted-foreground">{attachment.uploadedByName} • {formatDate(attachment.createdAt)}</p>
-                              <p className="text-xs text-muted-foreground">{attachment.contentType || 'arquivo'} • {formatFileSize(attachment.sizeBytes)}</p>
+                      <div className="space-y-3">
+                        {selectedTicket.attachments.length ? (
+                          selectedTicket.attachments.map((attachment) => (
+                            <div key={attachment.id} className="rounded-xl border border-border/70 bg-white p-4">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="truncate font-medium text-slate-900">{attachment.fileName}</p>
+                                  <p className="mt-1 text-sm text-muted-foreground">{attachment.uploadedByName} • {formatDate(attachment.createdAt)}</p>
+                                  <p className="text-xs text-muted-foreground">{attachment.contentType || 'arquivo'} • {formatFileSize(attachment.sizeBytes)}</p>
+                                </div>
+                                <Button variant="subtle" size="sm" onClick={() => void ticketsApi.downloadAttachment(attachment)}>
+                                  Baixar
+                                </Button>
+                              </div>
                             </div>
-                            <Button variant="subtle" size="sm" onClick={() => void ticketsApi.downloadAttachment(attachment)}>Baixar</Button>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="rounded-xl border border-dashed border-border/70 bg-slate-50/70 p-4 text-sm text-muted-foreground">Nenhuma evidencia anexada ate o momento.</div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        ) : (
-          <EmptyState title="Selecione um atendimento" description="Escolha um item da fila para ver historico, evidencias e controles do atendimento." icon={CircleDot} />
-        )}
-      </div>
+                          ))
+                        ) : (
+                          <div className="rounded-xl border border-dashed border-border/70 bg-slate-50/70 p-4 text-sm text-muted-foreground">Nenhuma evidencia anexada ate o momento.</div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isDialogOpen} onOpenChange={(open) => {
         setIsDialogOpen(open)
@@ -732,4 +751,5 @@ const formatFileSize = (bytes: number) => {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
+
 
