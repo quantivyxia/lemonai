@@ -1,4 +1,5 @@
 import { createContext, useCallback, useEffect, useMemo, useState } from 'react'
+import { toast } from 'sonner'
 
 import { useAuth } from '@/hooks/use-auth'
 import { permissionMatrixMock } from '@/mocks/platform'
@@ -22,6 +23,7 @@ import type {
 
 type PlatformStoreValue = {
   isLoading: boolean
+  loadError: string | null
   tenants: Tenant[]
   users: User[]
   dashboards: Dashboard[]
@@ -42,10 +44,13 @@ type PlatformStoreValue = {
       | 'id'
       | 'usersCount'
       | 'dashboardsCount'
+      | 'supportHoursRemaining'
       | 'usersLimitReached'
       | 'dashboardsLimitReached'
+      | 'supportLimitReached'
       | 'usersUsagePercent'
       | 'dashboardsUsagePercent'
+      | 'supportUsagePercent'
       | 'brandingConfigured'
     > & { id?: string },
   ) => Promise<void>
@@ -102,17 +107,33 @@ const initialState: PersistedState = {
   settings: defaultPlatformSettings,
 }
 
+const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms))
+
 export const PlatformStoreContext = createContext<PlatformStoreValue | undefined>(undefined)
 
 export const PlatformStoreProvider = ({ children }: { children: React.ReactNode }) => {
-  const { isAuthenticated, isViewAsMode, user } = useAuth()
+  const { isAuthenticated, user } = useAuth()
   const [state, setState] = useState<PersistedState>(initialState)
   const [isLoading, setIsLoading] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [roleIds, setRoleIds] = useState<Record<UserRole, string>>({
     super_admin: '',
     analyst: '',
     viewer: '',
   })
+
+  const fetchBootstrapWithRetry = useCallback(async () => {
+    try {
+      return await platformApi.fetchBootstrap({ userRole: user?.role })
+    } catch (firstError) {
+      await wait(800)
+      try {
+        return await platformApi.fetchBootstrap({ userRole: user?.role })
+      } catch {
+        throw firstError
+      }
+    }
+  }, [user?.role])
 
   const reloadData = useCallback(async () => {
     if (!isAuthenticated) {
@@ -126,12 +147,14 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
         analyst: '',
         viewer: '',
       })
+      setLoadError(null)
       return
     }
 
     setIsLoading(true)
     try {
-      const data = await platformApi.fetchBootstrap({ userRole: user?.role })
+      const data = await fetchBootstrapWithRetry()
+      setLoadError(null)
       setState((current) => ({
         ...current,
         tenants: data.tenants,
@@ -147,10 +170,78 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
         accessSeries: data.accessSeries,
       }))
       setRoleIds(data.roleIds)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Nao foi possivel carregar os dados da plataforma.'
+      setLoadError(message)
+      toast.error(message)
     } finally {
       setIsLoading(false)
     }
-  }, [isAuthenticated, isViewAsMode, user?.id, user?.role, user?.tenantId])
+  }, [fetchBootstrapWithRetry, isAuthenticated])
+
+  const reloadTenants = useCallback(async () => {
+    if (!isAuthenticated) {
+      setState((current) => ({ ...current, tenants: [] }))
+      return
+    }
+
+    const tenants = await platformApi.fetchTenants({ brandings: state.brandings })
+    setState((current) => ({ ...current, tenants }))
+  }, [isAuthenticated, state.brandings])
+
+  const reloadUsers = useCallback(async () => {
+    if (!isAuthenticated || (user?.role !== 'super_admin' && user?.role !== 'analyst')) {
+      setState((current) => ({ ...current, users: [] }))
+      return
+    }
+
+    const users = await platformApi.fetchUsers()
+    setState((current) => ({ ...current, users }))
+  }, [isAuthenticated, user?.role])
+
+  const reloadDashboards = useCallback(async () => {
+    if (!isAuthenticated) {
+      setState((current) => ({ ...current, dashboards: [] }))
+      return
+    }
+
+    const dashboards = await platformApi.fetchDashboards({ currentDashboards: state.dashboards })
+    setState((current) => ({ ...current, dashboards }))
+  }, [isAuthenticated, state.dashboards])
+
+  const reloadGroups = useCallback(async () => {
+    if (!isAuthenticated) {
+      setState((current) => ({ ...current, groups: [] }))
+      return
+    }
+
+    const groups = await platformApi.fetchGroups({
+      users: state.users,
+      dashboards: state.dashboards,
+      tenants: state.tenants,
+    })
+    setState((current) => ({ ...current, groups }))
+  }, [isAuthenticated, state.dashboards, state.tenants, state.users])
+
+  const reloadWorkspaces = useCallback(async () => {
+    if (!isAuthenticated) {
+      setState((current) => ({ ...current, workspaces: [] }))
+      return
+    }
+
+    const workspaces = await platformApi.fetchWorkspaces()
+    setState((current) => ({ ...current, workspaces }))
+  }, [isAuthenticated])
+
+  const reloadRLSRules = useCallback(async () => {
+    if (!isAuthenticated || (user?.role !== 'super_admin' && user?.role !== 'analyst')) {
+      setState((current) => ({ ...current, rlsRules: [] }))
+      return
+    }
+
+    const rlsRules = await platformApi.fetchRLSRules()
+    setState((current) => ({ ...current, rlsRules }))
+  }, [isAuthenticated, user?.role])
 
   useEffect(() => {
     void reloadData()
@@ -164,10 +255,12 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
         status: tenant.status,
         max_users: tenant.maxUsers,
         max_dashboards: tenant.maxDashboards,
+        support_hours_total: tenant.supportHoursTotal,
+        support_hours_consumed: tenant.supportHoursConsumed,
       })
-      await reloadData()
+      await reloadTenants()
     },
-    [reloadData],
+    [reloadTenants],
   )
 
   const deleteTenant: PlatformStoreValue['deleteTenant'] = useCallback(
@@ -208,9 +301,9 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
         avatar_url: user.avatarUrl ?? '',
         ...(user.password ? { password: user.password } : {}),
       })
-      await reloadData()
+      await Promise.all([reloadUsers(), reloadTenants()])
     },
-    [reloadData, roleIds, state.groups],
+    [reloadTenants, reloadUsers, roleIds, state.groups],
   )
 
   const toggleUserStatus: PlatformStoreValue['toggleUserStatus'] = useCallback(
@@ -222,25 +315,25 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
         id: userId,
         status: user.status === 'active' ? 'inactive' : 'active',
       })
-      await reloadData()
+      await Promise.all([reloadUsers(), reloadTenants()])
     },
-    [reloadData, state.users],
+    [reloadTenants, reloadUsers, state.users],
   )
 
   const deleteUser: PlatformStoreValue['deleteUser'] = useCallback(
     async (userId) => {
       await platformApi.deleteUser(userId)
-      await reloadData()
+      await Promise.all([reloadUsers(), reloadTenants()])
     },
-    [reloadData],
+    [reloadTenants, reloadUsers],
   )
 
   const deleteUsers: PlatformStoreValue['deleteUsers'] = useCallback(
     async (userIds) => {
       await platformApi.deleteUsers(userIds)
-      await reloadData()
+      await Promise.all([reloadUsers(), reloadTenants()])
     },
-    [reloadData],
+    [reloadTenants, reloadUsers],
   )
 
   const upsertDashboard: PlatformStoreValue['upsertDashboard'] = useCallback(
@@ -270,9 +363,9 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
         refresh_schedule: dashboard.refreshSchedule ?? '',
         tags: dashboard.tags ?? [dashboard.category.trim()],
       })
-      await reloadData()
+      await Promise.all([reloadDashboards(), reloadTenants()])
     },
-    [reloadData, state.workspaces],
+    [reloadDashboards, reloadTenants, state.workspaces],
   )
 
   const upsertGroup: PlatformStoreValue['upsertGroup'] = useCallback(
@@ -296,17 +389,17 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
         members,
         dashboards,
       })
-      await reloadData()
+      await Promise.all([reloadGroups(), reloadUsers()])
     },
-    [reloadData, state.dashboards, state.users],
+    [reloadGroups, reloadUsers, state.dashboards, state.users],
   )
 
   const deleteGroup: PlatformStoreValue['deleteGroup'] = useCallback(
     async (groupId) => {
       await platformApi.deleteGroup(groupId)
-      await reloadData()
+      await Promise.all([reloadGroups(), reloadUsers()])
     },
-    [reloadData],
+    [reloadGroups, reloadUsers],
   )
 
   const upsertWorkspace: PlatformStoreValue['upsertWorkspace'] = useCallback(
@@ -319,17 +412,17 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
         status: workspace.status,
         last_sync_at: workspace.lastSyncAt,
       })
-      await reloadData()
+      await reloadWorkspaces()
     },
-    [reloadData],
+    [reloadWorkspaces],
   )
 
   const deleteWorkspace: PlatformStoreValue['deleteWorkspace'] = useCallback(
     async (workspaceId) => {
       await platformApi.deleteWorkspace(workspaceId)
-      await reloadData()
+      await reloadWorkspaces()
     },
-    [reloadData],
+    [reloadWorkspaces],
   )
 
   const upsertBranding: PlatformStoreValue['upsertBranding'] = useCallback(
@@ -347,9 +440,11 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
         favicon_url: branding.faviconUrl ?? '',
         custom_domain_enabled: Boolean(branding.domain?.trim()),
       })
-      await reloadData()
+      const brandings = await platformApi.fetchBrandings()
+      const tenants = await platformApi.fetchTenants({ brandings })
+      setState((current) => ({ ...current, brandings, tenants }))
     },
-    [reloadData, state.brandings],
+    [state.brandings],
   )
 
   const upsertRLSRule: PlatformStoreValue['upsertRLSRule'] = useCallback(
@@ -366,33 +461,33 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
         notes: rule.notes ?? '',
         is_active: rule.isActive,
       })
-      await reloadData()
+      await reloadRLSRules()
     },
-    [reloadData],
+    [reloadRLSRules],
   )
 
   const deleteRLSRule: PlatformStoreValue['deleteRLSRule'] = useCallback(
     async (ruleId) => {
       await platformApi.deleteRLSRule(ruleId)
-      await reloadData()
+      await reloadRLSRules()
     },
-    [reloadData],
+    [reloadRLSRules],
   )
 
   const toggleRLSRuleStatus: PlatformStoreValue['toggleRLSRuleStatus'] = useCallback(
     async (ruleId) => {
       await platformApi.toggleRLSRule(ruleId)
-      await reloadData()
+      await reloadRLSRules()
     },
-    [reloadData],
+    [reloadRLSRules],
   )
 
   const duplicateRLSRule: PlatformStoreValue['duplicateRLSRule'] = useCallback(
     async (ruleId) => {
       await platformApi.duplicateRLSRule(ruleId)
-      await reloadData()
+      await reloadRLSRules()
     },
-    [reloadData],
+    [reloadRLSRules],
   )
 
   const setPermissionMatrix: PlatformStoreValue['setPermissionMatrix'] = useCallback((matrix) => {
@@ -406,6 +501,7 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
   const value = useMemo<PlatformStoreValue>(
     () => ({
       isLoading,
+      loadError,
       tenants: state.tenants,
       users: state.users,
       dashboards: state.dashboards,
@@ -441,6 +537,7 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
     }),
     [
       isLoading,
+      loadError,
       reloadData,
       state.accessLogs,
       state.accessSeries,

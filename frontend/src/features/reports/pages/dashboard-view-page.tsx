@@ -21,9 +21,25 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { usePlatformStore } from '@/hooks/use-platform-store'
+import { appLogger } from '@/services/app-logger'
 import { platformApi, type DashboardEmbedConfig } from '@/services/platform-api'
 
 type EmbedState = 'loading' | 'ready' | 'error'
+
+const safeResetPowerBIContainer = (powerBIService: service.Service, container: HTMLDivElement) => {
+  try {
+    powerBIService.reset(container)
+  } catch (error) {
+    appLogger.warn('Falha ao limpar o container do Power BI. Aplicando limpeza manual do DOM.', {
+      message: error instanceof Error ? error.message : 'unknown',
+    })
+    try {
+      container.replaceChildren()
+    } catch {
+      container.innerHTML = ''
+    }
+  }
+}
 
 export const DashboardViewPage = () => {
   const { dashboards } = usePlatformStore()
@@ -103,9 +119,9 @@ export const DashboardViewPage = () => {
     }
 
     const powerBIService = powerBIServiceRef.current
-    powerBIService.reset(container)
+    safeResetPowerBIContainer(powerBIService, container)
 
-    const reportFilters: models.IFilter[] = (embedConfig.reportFilters ?? []).map((rule) => ({
+    const reportFilters: models.IFilter[] = embedConfig.reportFilters.map((rule) => ({
       $schema: 'http://powerbi.com/product/schema#basic',
       target: {
         table: rule.table,
@@ -157,7 +173,7 @@ export const DashboardViewPage = () => {
     return () => {
       report.off('loaded')
       report.off('error')
-      powerBIService.reset(container)
+      safeResetPowerBIContainer(powerBIService, container)
     }
   }, [embedConfig, embedState])
 
@@ -225,9 +241,6 @@ export const DashboardViewPage = () => {
               <RefreshCcw className="h-4 w-4" />
               Atualizar token
             </Button>
-            <Button variant="outline" className="gap-2" onClick={() => setEmbedState('error')}>
-              Simular erro
-            </Button>
             <Button className="gap-2" onClick={handleFullScreen}>
               <Maximize2 className="h-4 w-4" />
               Tela cheia
@@ -238,7 +251,7 @@ export const DashboardViewPage = () => {
 
       <div className="grid gap-4 lg:grid-cols-1">
         <Card id="embed-container">
-          <CardHeader className="pb-3">
+          <CardHeader className="pb-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="neutral">{dashboard.tenantName}</Badge>
@@ -255,7 +268,7 @@ export const DashboardViewPage = () => {
             </div>
           </CardHeader>
           <CardContent className="px-3 pb-3 pt-0 sm:px-4">
-            <div className="relative h-[calc(100vh-245px)] min-h-[640px] overflow-hidden rounded-2xl border border-primary/20 bg-muted/20 p-2">
+            <div className="relative h-[calc(100vh-205px)] min-h-[720px] overflow-hidden rounded-2xl border border-primary/20 bg-muted/20 p-2">
               {embedState === 'loading' ? (
                 <>
                   <Skeleton className="h-full w-full rounded-xl" />
@@ -264,14 +277,10 @@ export const DashboardViewPage = () => {
               ) : null}
 
               {embedState === 'ready' ? (
-                <div className="flex h-full min-h-0 flex-col rounded-xl border border-border/70 bg-white p-2">
-                  <div className="mb-3 flex items-center justify-between">
-                    <p className="text-sm font-semibold text-slate-900">Power BI Embedded</p>
-                    <Badge>{embedConfig?.accessToken.startsWith('demo-embed-token') ? 'Token demo' : 'Token real'}</Badge>
-                  </div>
+                <div className="h-full rounded-xl border border-border/70 bg-white p-2">
                   <div
                     ref={embedHostRef}
-                    className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border/60"
+                    className="h-full overflow-hidden rounded-lg border border-border/60"
                   />
                 </div>
               ) : null}

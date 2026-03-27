@@ -1,16 +1,63 @@
-from pathlib import Path
-import os
+from __future__ import annotations
 
-from dotenv import load_dotenv
+import os
+import socket
 from datetime import timedelta
+from pathlib import Path
+
 from corsheaders.defaults import default_headers
+from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 load_dotenv(BASE_DIR / '.env', override=True)
 
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'unsafe-secret-key')
-DEBUG = os.getenv('DJANGO_DEBUG', 'False') == 'True'
-ALLOWED_HOSTS = [host.strip() for host in os.getenv('DJANGO_ALLOWED_HOSTS', 'localhost').split(',') if host.strip()]
+
+def env_bool(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+def env_int(name: str, default: int) -> int:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def env_list(name: str, default: str = '') -> list[str]:
+    raw_value = os.getenv(name, default)
+    return [item.strip() for item in raw_value.split(',') if item.strip()]
+
+
+def append_host(values: list[str], host: str | None) -> list[str]:
+    if not host:
+        return values
+    normalized = host.strip()
+    if not normalized or normalized in values:
+        return values
+    return [*values, normalized]
+
+
+def resolve_ipv4_host(host: str, port: str) -> str:
+    try:
+        addresses = socket.getaddrinfo(host, int(port), socket.AF_INET, socket.SOCK_STREAM)
+    except OSError:
+        return host
+    for family, _socktype, _proto, _canonname, sockaddr in addresses:
+        if family == socket.AF_INET and sockaddr:
+            return sockaddr[0]
+    return host
+
+
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY') or 'unsafe-secret-key'
+DEBUG = env_bool('DJANGO_DEBUG', False)
+ALLOWED_HOSTS = env_list('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1')
+ALLOWED_HOSTS = append_host(ALLOWED_HOSTS, os.getenv('WEBSITE_HOSTNAME'))
 
 INSTALLED_APPS = [
     'corsheaders',
@@ -23,6 +70,7 @@ INSTALLED_APPS = [
     'django.contrib.postgres',
     'rest_framework',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'django_filters',
     'drf_spectacular',
     'apps.common',
@@ -33,12 +81,15 @@ INSTALLED_APPS = [
     'apps.workspaces',
     'apps.permissions',
     'apps.audit',
+    'apps.tickets',
     'apps.branding',
     'apps.powerbi',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
+    'apps.common.middleware.RequestContextMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -71,17 +122,27 @@ ASGI_APPLICATION = 'config.asgi.application'
 DB_PROVIDER = os.getenv('DB_PROVIDER', 'sqlite').lower()
 
 if DB_PROVIDER == 'postgres':
+    postgres_host = os.getenv('POSTGRES_HOST', 'localhost')
+    postgres_port = os.getenv('POSTGRES_PORT', '5432')
+    postgres_options = {
+        'sslmode': os.getenv('POSTGRES_SSLMODE', 'require'),
+    }
+    postgres_hostaddr = os.getenv('POSTGRES_HOSTADDR')
+    if postgres_hostaddr:
+        postgres_options['hostaddr'] = postgres_hostaddr
+    elif env_bool('POSTGRES_FORCE_IPV4', False):
+        postgres_options['hostaddr'] = resolve_ipv4_host(postgres_host, postgres_port)
+
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
             'NAME': os.getenv('POSTGRES_DB', 'insighthub'),
             'USER': os.getenv('POSTGRES_USER', 'postgres'),
             'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'postgres'),
-            'HOST': os.getenv('POSTGRES_HOST', 'localhost'),
-            'PORT': os.getenv('POSTGRES_PORT', '5432'),
-            'OPTIONS': {
-                'sslmode': os.getenv('POSTGRES_SSLMODE', 'require'),
-            },
+            'HOST': postgres_host,
+            'PORT': postgres_port,
+            'OPTIONS': postgres_options,
+            'CONN_MAX_AGE': env_int('POSTGRES_CONN_MAX_AGE', 60),
         }
     }
 elif DB_PROVIDER in ('mssql', 'fabric'):
@@ -124,6 +185,9 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'users.User'
@@ -143,26 +207,97 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'apps.common.pagination.DefaultPageNumberPagination',
     'PAGE_SIZE': 20,
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_THROTTLE_CLASSES': (
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+        'rest_framework.throttling.ScopedRateThrottle',
+    ),
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': os.getenv('DRF_THROTTLE_ANON', '60/minute'),
+        'user': os.getenv('DRF_THROTTLE_USER', '300/minute'),
+        'login': os.getenv('DRF_THROTTLE_LOGIN', '10/minute'),
+    },
+    'EXCEPTION_HANDLER': 'apps.common.exceptions.api_exception_handler',
 }
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=env_int('JWT_ACCESS_LIFETIME_MINUTES', 30)),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=env_int('JWT_REFRESH_LIFETIME_DAYS', 7)),
     'ROTATE_REFRESH_TOKENS': False,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'UPDATE_LAST_LOGIN': True,
 }
 
 SPECTACULAR_SETTINGS = {
     'TITLE': 'InsightHub API',
     'DESCRIPTION': 'Embedded BI multi-tenant API',
-    'VERSION': '0.1.0',
+    'VERSION': '1.0.0',
 }
 
-CORS_ALLOWED_ORIGINS = [
-    origin.strip()
-    for origin in os.getenv('DJANGO_CORS_ALLOWED_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173').split(',')
-    if origin.strip()
-]
-
+CORS_ALLOWED_ORIGINS = env_list(
+    'DJANGO_CORS_ALLOWED_ORIGINS',
+    'http://localhost:5173,http://127.0.0.1:5173',
+)
+CSRF_TRUSTED_ORIGINS = env_list('DJANGO_CSRF_TRUSTED_ORIGINS', ','.join(CORS_ALLOWED_ORIGINS))
 CORS_ALLOW_HEADERS = list(default_headers) + [
     'x-insighthub-view-as-user',
+    'x-request-id',
 ]
+CORS_ALLOW_CREDENTIALS = False
+
+DATA_UPLOAD_MAX_MEMORY_SIZE = env_int('DJANGO_DATA_UPLOAD_MAX_MEMORY_SIZE', 10 * 1024 * 1024)
+FILE_UPLOAD_MAX_MEMORY_SIZE = env_int('DJANGO_FILE_UPLOAD_MAX_MEMORY_SIZE', 10 * 1024 * 1024)
+
+LOG_LEVEL = os.getenv('DJANGO_LOG_LEVEL', 'INFO').upper()
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'filters': {
+        'request_id': {
+            '()': 'apps.common.logging.RequestIdFilter',
+        },
+    },
+    'formatters': {
+        'json': {
+            '()': 'apps.common.logging.KeyValueFormatter',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'filters': ['request_id'],
+            'formatter': 'json',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': LOG_LEVEL,
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': LOG_LEVEL,
+            'propagate': False,
+        },
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        'insighthub.request': {
+            'handlers': ['console'],
+            'level': LOG_LEVEL,
+            'propagate': False,
+        },
+        'insighthub.api': {
+            'handlers': ['console'],
+            'level': LOG_LEVEL,
+            'propagate': False,
+        },
+        'insighthub.integration.powerbi': {
+            'handlers': ['console'],
+            'level': LOG_LEVEL,
+            'propagate': False,
+        },
+    },
+}
