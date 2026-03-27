@@ -500,35 +500,63 @@ export const TicketsPage = () => {
             ) : tickets.length ? (
               <div className="space-y-3">
                 {tickets.map((ticket) => (
-                  <div key={ticket.id} className="rounded-2xl border border-border/70 bg-white p-4 shadow-card">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0 space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-semibold text-slate-900">{ticket.title}</p>
-                          <Badge variant={statusVariantMap[ticket.status]}>{ticket.statusLabel}</Badge>
-                          <Badge variant={priorityVariantMap[ticket.priority]}>{ticket.priorityLabel}</Badge>
+                  <div key={ticket.id} className="overflow-hidden rounded-3xl border border-border/70 bg-gradient-to-br from-white via-white to-slate-50/80 shadow-card">
+                    <div className="border-b border-border/60 px-5 py-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-base font-semibold text-slate-900">{ticket.title}</p>
+                            <Badge variant={statusVariantMap[ticket.status]}>{ticket.statusLabel}</Badge>
+                            <Badge variant={priorityVariantMap[ticket.priority]}>{ticket.priorityLabel}</Badge>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                            <span className="rounded-full bg-slate-100 px-2.5 py-1 font-semibold uppercase tracking-[0.06em] text-slate-600">{ticket.code}</span>
+                            <span className="inline-flex items-center gap-1 rounded-full bg-primary/5 px-2.5 py-1 text-primary">
+                              <Clock3 className="h-3.5 w-3.5" />
+                              Ultima atualizacao {formatDate(ticket.lastActivityAt)}
+                            </span>
+                          </div>
                         </div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">{ticket.code}</p>
-                      </div>
-                      <p className="text-xs text-muted-foreground">{formatDate(ticket.lastActivityAt)}</p>
-                    </div>
-
-                    <p className="mt-3 line-clamp-2 text-sm text-slate-700">{ticket.description}</p>
-
-                    <div className="mt-4 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
-                      <div><span className="font-medium text-slate-700">Solicitante:</span> {ticket.requesterName}</div>
-                      <div><span className="font-medium text-slate-700">Tenant:</span> {ticket.tenantName}</div>
-                      <div><span className="font-medium text-slate-700">Previsao:</span> {formatDateOnly(ticket.dueDate)}</div>
-                      <div className="flex items-center gap-3">
-                        <span className="inline-flex items-center gap-1"><MessageSquare className="h-3.5 w-3.5" />{formatNumber(ticket.commentsCount)}</span>
-                        <span className="inline-flex items-center gap-1"><Paperclip className="h-3.5 w-3.5" />{formatNumber(ticket.attachmentsCount)}</span>
+                        <div className="rounded-2xl border border-border/70 bg-white/80 px-3 py-2 text-right">
+                          <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Previsao</p>
+                          <p className="mt-1 text-sm font-medium text-slate-700">{formatDateOnly(ticket.dueDate)}</p>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="mt-4 flex justify-end">
-                      <Button variant="outline" size="sm" onClick={() => setTicketQuery(ticket.id)}>
-                        Detalhes
-                      </Button>
+                    <div className="space-y-4 px-5 py-4">
+                      <p className="line-clamp-2 text-sm leading-6 text-slate-700">{ticket.description}</p>
+
+                      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1.1fr_1.1fr_auto_auto]">
+                        <div className="rounded-2xl border border-border/60 bg-white/80 px-3 py-2.5">
+                          <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Solicitante</p>
+                          <p className="mt-1 text-sm font-medium text-slate-800">{ticket.requesterName}</p>
+                        </div>
+                        <div className="rounded-2xl border border-border/60 bg-white/80 px-3 py-2.5">
+                          <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Tenant</p>
+                          <p className="mt-1 text-sm font-medium text-slate-800">{ticket.tenantName}</p>
+                        </div>
+                        <div className="rounded-2xl border border-border/60 bg-white/80 px-3 py-2.5">
+                          <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Comentarios</p>
+                          <p className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-slate-800">
+                            <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+                            {formatNumber(ticket.commentsCount)}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-border/60 bg-white/80 px-3 py-2.5">
+                          <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Arquivos</p>
+                          <p className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-slate-800">
+                            <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
+                            {formatNumber(ticket.attachmentsCount)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end">
+                        <Button variant="outline" size="sm" onClick={() => setTicketQuery(ticket.id)}>
+                          Detalhes
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -555,7 +583,7 @@ export const TicketsPage = () => {
                       <Badge variant={priorityVariantMap[selectedTicket.priority]}>{selectedTicket.priorityLabel}</Badge>
                     </DialogTitle>
                     <DialogDescription className="mt-1">
-                      {selectedTicket.code} • aberto em {formatDate(selectedTicket.openedAt)}
+                      {selectedTicket.code} - aberto em {formatDate(selectedTicket.openedAt)}
                     </DialogDescription>
                   </div>
                   {canEditBasics ? <Button variant="outline" size="sm" onClick={openEditDialog}>Editar suporte</Button> : null}
@@ -673,8 +701,8 @@ export const TicketsPage = () => {
                               <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
                                   <p className="truncate font-medium text-slate-900">{attachment.fileName}</p>
-                                  <p className="mt-1 text-sm text-muted-foreground">{attachment.uploadedByName} • {formatDate(attachment.createdAt)}</p>
-                                  <p className="text-xs text-muted-foreground">{attachment.contentType || 'arquivo'} • {formatFileSize(attachment.sizeBytes)}</p>
+                                  <p className="mt-1 text-sm text-muted-foreground">{attachment.uploadedByName} - {formatDate(attachment.createdAt)}</p>
+                                  <p className="text-xs text-muted-foreground">{attachment.contentType || 'arquivo'} - {formatFileSize(attachment.sizeBytes)}</p>
                                 </div>
                                 <Button variant="subtle" size="sm" onClick={() => void ticketsApi.downloadAttachment(attachment)}>
                                   Baixar
