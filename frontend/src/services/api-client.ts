@@ -4,6 +4,9 @@ import { sessionStorageService } from '@/services/session-storage'
 const baseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, '')
 const API_BASE_URL = baseUrl ?? 'http://127.0.0.1:8000/api'
 const API_TIMEOUT_MS = Number(import.meta.env.VITE_API_TIMEOUT_MS ?? 20000)
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+const RETRYABLE_STATUS_CODES = new Set([500, 502, 503, 504])
+const SAFE_REQUEST_RETRY_DELAYS_MS = [350, 900]
 
 type RequestOptions = {
   auth?: boolean
@@ -19,6 +22,8 @@ const buildUrl = (path: string) => {
   if (path.startsWith('http://') || path.startsWith('https://')) return path
   return `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`
 }
+
+const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms))
 
 const NETWORK_ERROR_MESSAGE = `Nao foi possivel conectar com a API (${API_BASE_URL}). Verifique se o backend esta em execucao.`
 const TIMEOUT_ERROR_MESSAGE = `Tempo limite excedido ao chamar a API (${API_TIMEOUT_MS} ms).`
@@ -101,6 +106,33 @@ const fetchWithTimeout = async (url: string, init: RequestInit) => {
   }
 }
 
+const fetchWithResilience = async (url: string, init: RequestInit, method: string) => {
+  const isSafeMethod = SAFE_METHODS.has(method)
+  let lastError: unknown = null
+
+  for (let attempt = 0; attempt <= SAFE_REQUEST_RETRY_DELAYS_MS.length; attempt += 1) {
+    if (attempt > 0) {
+      await wait(SAFE_REQUEST_RETRY_DELAYS_MS[attempt - 1])
+    }
+
+    try {
+      const response = await fetchWithTimeout(url, init)
+      if (!isSafeMethod || !RETRYABLE_STATUS_CODES.has(response.status) || attempt === SAFE_REQUEST_RETRY_DELAYS_MS.length) {
+        return response
+      }
+      lastError = new Error(`retryable_status_${response.status}`)
+    } catch (error) {
+      lastError = error
+      if (!isSafeMethod || attempt === SAFE_REQUEST_RETRY_DELAYS_MS.length) {
+        throw error
+      }
+    }
+  }
+
+  if (lastError instanceof Error) throw lastError
+  throw new Error(NETWORK_ERROR_MESSAGE)
+}
+
 const refreshAccessToken = async () => {
   const refresh = sessionStorageService.getRefreshToken()
   if (!refresh) return null
@@ -165,7 +197,7 @@ export const apiRequest = async <T>(
   const auth = options.auth ?? true
   const retryOnAuthError = options.retryOnAuthError ?? true
   const method = (init.method ?? 'GET').toUpperCase()
-  const isSafeMethod = method === 'GET' || method === 'HEAD' || method === 'OPTIONS'
+  const isSafeMethod = SAFE_METHODS.has(method)
   const url = buildUrl(path)
 
   const headers = new Headers(init.headers)
@@ -178,7 +210,7 @@ export const apiRequest = async <T>(
 
   let response: Response
   try {
-    response = await fetchWithTimeout(url, { ...init, headers })
+    response = await fetchWithResilience(url, { ...init, headers }, method)
   } catch (error) {
     const message = error instanceof Error ? error.message : NETWORK_ERROR_MESSAGE
     appLogger.error('Falha de comunicacao com API', { path, method, error: message })
@@ -191,7 +223,7 @@ export const apiRequest = async <T>(
       headers.set('Authorization', `Bearer ${refreshedToken}`)
       let retryResponse: Response
       try {
-        retryResponse = await fetchWithTimeout(url, { ...init, headers })
+        retryResponse = await fetchWithResilience(url, { ...init, headers }, method)
       } catch (error) {
         const message = error instanceof Error ? error.message : NETWORK_ERROR_MESSAGE
         throw new Error(message === TIMEOUT_ERROR_MESSAGE ? message : NETWORK_ERROR_MESSAGE)
@@ -219,7 +251,7 @@ export const apiRequest = async <T>(
 
     let retryResponse: Response
     try {
-      retryResponse = await fetchWithTimeout(url, { ...init, headers })
+      retryResponse = await fetchWithResilience(url, { ...init, headers }, method)
     } catch (error) {
       const message = error instanceof Error ? error.message : NETWORK_ERROR_MESSAGE
       throw new Error(message === TIMEOUT_ERROR_MESSAGE ? message : NETWORK_ERROR_MESSAGE)
@@ -275,7 +307,7 @@ export const apiDownload = async (
 
   let response: Response
   try {
-    response = await fetchWithTimeout(url, { ...init, headers })
+    response = await fetchWithResilience(url, { ...init, headers }, method)
   } catch (error) {
     const message = error instanceof Error ? error.message : NETWORK_ERROR_MESSAGE
     throw new Error(message === TIMEOUT_ERROR_MESSAGE ? message : NETWORK_ERROR_MESSAGE)
@@ -285,7 +317,7 @@ export const apiDownload = async (
     const refreshedToken = await refreshAccessToken()
     if (refreshedToken) {
       headers.set('Authorization', `Bearer ${refreshedToken}`)
-      response = await fetchWithTimeout(url, { ...init, headers })
+      response = await fetchWithResilience(url, { ...init, headers }, method)
     }
   }
 
