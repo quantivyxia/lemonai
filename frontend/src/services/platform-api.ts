@@ -921,6 +921,13 @@ export const platformApi = {
     return apiRequest(`/users/${userId}/`, { method: 'DELETE' })
   },
 
+  setUserPassword(userId: string, password: string) {
+    return apiRequest(`/users/${userId}/set-password/`, {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    })
+  },
+
   async deleteUsers(userIds: string[]) {
     const uniqueIds = [...new Set(userIds.filter(Boolean))]
     await Promise.all(uniqueIds.map((userId) => this.deleteUser(userId)))

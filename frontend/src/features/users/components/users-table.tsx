@@ -26,6 +26,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { usePlatformStore } from '@/hooks/use-platform-store'
 import { useTenantScope } from '@/hooks/use-tenant-scope'
 import { formatDate } from '@/lib/utils'
+import { platformApi } from '@/services/platform-api'
 import type { User } from '@/types/entities'
 
 const roleLabelMap: Record<User['role'], string> = {
@@ -212,6 +213,8 @@ export const UsersTable = () => {
         .filter((group) => form.groupIds.includes(group.id))
         .map((group) => group.name)
 
+      const password = form.password.trim()
+
       await upsertUser({
         id: form.id,
         tenantId: form.tenantId,
@@ -223,9 +226,12 @@ export const UsersTable = () => {
         groups: selectedGroups,
         groupIds: form.groupIds,
         dashboardIds: form.dashboardIds,
-        ...((isCreate || form.password.trim()) ? { password: form.password.trim() } : {}),
+        ...(isCreate ? { password } : {}),
         status: form.status,
       })
+      if (!isCreate && form.id && password) {
+        await platformApi.setUserPassword(form.id, password)
+      }
       toast.success(form.id ? 'Usuario atualizado.' : 'Usuario criado com sucesso.')
       setIsDialogOpen(false)
     } catch (error) {
