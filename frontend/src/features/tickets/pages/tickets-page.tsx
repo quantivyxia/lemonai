@@ -591,11 +591,11 @@ export const TicketsPage = () => {
       <Dialog open={Boolean(selectedTicket)} onOpenChange={(open) => {
         if (!open) setTicketQuery(null)
       }}>
-        <DialogContent className="max-h-[88vh] max-w-6xl overflow-y-auto">
+        <DialogContent className="max-h-[88vh] max-w-6xl overflow-y-auto pr-14 sm:pr-16">
           {selectedTicket ? (
             <>
               <DialogHeader>
-                <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex flex-col gap-3 pr-2 md:flex-row md:items-start md:justify-between">
                   <div>
                     <DialogTitle className="flex flex-wrap items-center gap-2">
                       {selectedTicket.title}
@@ -606,7 +606,7 @@ export const TicketsPage = () => {
                       {selectedTicket.code} - aberto em {formatDate(selectedTicket.openedAt)}
                     </DialogDescription>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2 md:justify-end">
                     {canEditBasics ? <Button variant="outline" size="sm" onClick={openEditDialog}>Editar suporte</Button> : null}
                     {isSuperAdmin ? (
                       <Button variant="destructive" size="sm" onClick={() => void handleDeleteTicket()} disabled={isDeleting}>
