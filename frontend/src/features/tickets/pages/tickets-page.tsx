@@ -10,6 +10,7 @@ import {
   Search,
   Shield,
   Ticket as TicketIcon,
+  Trash2,
   Upload,
 } from 'lucide-react'
 import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -146,6 +147,7 @@ export const TicketsPage = () => {
   const [commentBody, setCommentBody] = useState('')
   const [commentInternal, setCommentInternal] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [isCommentSaving, setIsCommentSaving] = useState(false)
   const [isAttachmentSaving, setIsAttachmentSaving] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -357,6 +359,24 @@ export const TicketsPage = () => {
       toast.error(error instanceof Error ? error.message : 'Nao foi possivel atualizar o suporte.')
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  const handleDeleteTicket = async () => {
+    if (!selectedTicket || !isSuperAdmin) return
+    const confirmed = window.confirm(`Excluir o suporte "${selectedTicket.title}"? Essa acao nao pode ser desfeita.`)
+    if (!confirmed) return
+
+    setIsDeleting(true)
+    try {
+      await ticketsApi.deleteTicket(selectedTicket.id)
+      setTicketQuery(null)
+      await loadTickets()
+      toast.success('Suporte excluido com sucesso.')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Nao foi possivel excluir o suporte.')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -586,7 +606,15 @@ export const TicketsPage = () => {
                       {selectedTicket.code} - aberto em {formatDate(selectedTicket.openedAt)}
                     </DialogDescription>
                   </div>
-                  {canEditBasics ? <Button variant="outline" size="sm" onClick={openEditDialog}>Editar suporte</Button> : null}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {canEditBasics ? <Button variant="outline" size="sm" onClick={openEditDialog}>Editar suporte</Button> : null}
+                    {isSuperAdmin ? (
+                      <Button variant="destructive" size="sm" onClick={() => void handleDeleteTicket()} disabled={isDeleting}>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Excluir
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
               </DialogHeader>
 

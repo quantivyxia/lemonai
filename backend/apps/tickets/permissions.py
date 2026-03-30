@@ -22,6 +22,8 @@ class TicketPermission(BasePermission):
 
     def has_object_permission(self, request, view, obj):
         user = get_actor_user(request)
+        if request.method == 'DELETE':
+            return bool(user and user.is_authenticated and is_super_admin(user))
         return can_access_ticket(user, obj)
 
 

@@ -168,6 +168,11 @@ export const ticketsApi = {
     return mapTicket(response)
   },
 
+  async deleteTicket(ticketId: string) {
+    await apiRequest(`/tickets/${ticketId}/`, { method: 'DELETE' })
+    emitTicketNotificationsUpdated()
+  },
+
   async addComment(ticketId: string, payload: { body: string; is_internal?: boolean }) {
     const response = await apiRequest<BackendTicketComment>(`/tickets/${ticketId}/comments/`, {
       method: 'POST',
