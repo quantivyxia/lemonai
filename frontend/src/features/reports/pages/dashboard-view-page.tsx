@@ -47,7 +47,9 @@ export const DashboardViewPage = () => {
   const [embedState, setEmbedState] = useState<EmbedState>('loading')
   const [embedConfig, setEmbedConfig] = useState<DashboardEmbedConfig | null>(null)
   const embedHostRef = useRef<HTMLDivElement | null>(null)
+  const fullscreenContainerRef = useRef<HTMLDivElement | null>(null)
   const powerBIServiceRef = useRef<service.Service | null>(null)
+  const [isFullscreen, setIsFullscreen] = useState(false)
 
   const dashboard = useMemo(
     () => dashboards.find((item) => item.id === dashboardId) ?? null,
@@ -97,7 +99,7 @@ export const DashboardViewPage = () => {
   }
 
   const handleFullScreen = () => {
-    const targetElement = document.getElementById('embed-container')
+    const targetElement = fullscreenContainerRef.current
     if (!targetElement) return
     if (document.fullscreenElement) {
       void document.exitFullscreen()
@@ -105,6 +107,17 @@ export const DashboardViewPage = () => {
     }
     void targetElement.requestFullscreen()
   }
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === fullscreenContainerRef.current)
+    }
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange)
+    }
+  }, [])
 
   useEffect(() => {
     if (embedState !== 'ready' || !embedConfig || !embedHostRef.current) return
@@ -254,7 +267,7 @@ export const DashboardViewPage = () => {
       />
 
       <div className="grid gap-4 lg:grid-cols-1">
-        <Card id="embed-container">
+        <Card>
           <CardHeader className="pb-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
@@ -272,25 +285,38 @@ export const DashboardViewPage = () => {
             </div>
           </CardHeader>
           <CardContent className="px-3 pb-3 pt-0 sm:px-4">
-            <div className="relative h-[calc(100vh-205px)] min-h-[720px] overflow-hidden rounded-2xl border border-primary/20 bg-muted/20 p-2">
+            <div
+              ref={fullscreenContainerRef}
+              className={`relative overflow-hidden border border-primary/20 bg-muted/20 transition-all ${
+                isFullscreen
+                  ? 'h-screen min-h-screen rounded-none border-0 bg-white p-0'
+                  : 'h-[calc(100vh-205px)] min-h-[720px] rounded-2xl p-2'
+              }`}
+            >
               {embedState === 'loading' ? (
                 <>
-                  <Skeleton className="h-full w-full rounded-xl" />
+                  <Skeleton className={`h-full w-full ${isFullscreen ? 'rounded-none' : 'rounded-xl'}`} />
                   <p className="mt-3 text-sm text-muted-foreground">Carregando configuracao de embed segura...</p>
                 </>
               ) : null}
 
               {embedState === 'ready' ? (
-                <div className="h-full rounded-xl border border-border/70 bg-white p-2">
+                <div
+                  className={`h-full bg-white ${isFullscreen ? 'rounded-none border-0 p-0' : 'rounded-xl border border-border/70 p-2'}`}
+                >
                   <div
                     ref={embedHostRef}
-                    className="h-full overflow-hidden rounded-lg border border-border/60"
+                    className={`h-full overflow-hidden ${isFullscreen ? 'rounded-none border-0' : 'rounded-lg border border-border/60'}`}
                   />
                 </div>
               ) : null}
 
               {embedState === 'error' ? (
-                <div className="flex h-full flex-col items-center justify-center rounded-xl border border-rose-200 bg-rose-50/70 p-4 text-center">
+                <div
+                  className={`flex h-full flex-col items-center justify-center border border-rose-200 bg-rose-50/70 p-4 text-center ${
+                    isFullscreen ? 'rounded-none border-x-0 border-y-0' : 'rounded-xl'
+                  }`}
+                >
                   <AlertTriangle className="h-7 w-7 text-rose-600" />
                   <p className="mt-2 font-semibold text-rose-800">Falha ao carregar dashboard</p>
                   <p className="mt-1 max-w-sm text-sm text-rose-700">
