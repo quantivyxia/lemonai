@@ -334,6 +334,190 @@ type BackendBootstrapPayload = {
   roles: BackendRole[]
 }
 
+const buildRoleIds = (rolesRaw: BackendRole[]): Record<UserRole, string> => ({
+  super_admin: rolesRaw.find((role) => role.code === 'super_admin')?.id ?? '',
+  analyst: rolesRaw.find((role) => role.code === 'analyst')?.id ?? '',
+  viewer: rolesRaw.find((role) => role.code === 'viewer')?.id ?? '',
+})
+
+const buildBootstrapPayload = (bootstrap: BackendBootstrapPayload): BootstrapPayload => {
+  const tenantsRaw = bootstrap.tenants
+  const usersRaw = bootstrap.users
+  const workspacesRaw = bootstrap.workspaces
+  const dashboardsRaw = bootstrap.dashboards
+  const dashboardColumnsRaw = bootstrap.dashboard_columns
+  const groupsRaw = bootstrap.groups
+  const accessLogsRaw = bootstrap.access_logs
+  const brandingsRaw = bootstrap.brandings
+  const rlsRulesRaw = bootstrap.rls_rules
+  const rolesRaw = bootstrap.roles
+
+  const tenantById = new Map<string, string>()
+  const tenants: Tenant[] = tenantsRaw.map((tenant) => {
+    tenantById.set(tenant.id, tenant.name)
+    return {
+      id: tenant.id,
+      name: tenant.name,
+      status: normalizeTenantStatus(tenant.status),
+      usersCount: tenant.users_count ?? 0,
+      dashboardsCount: tenant.dashboards_count ?? 0,
+      maxUsers: tenant.max_users ?? 25,
+      maxDashboards: tenant.max_dashboards ?? 20,
+      supportHoursTotal: toNumber(tenant.support_hours_total, 0),
+      supportHoursConsumed: toNumber(tenant.support_hours_consumed, 0),
+      supportHoursRemaining: toNumber(tenant.support_hours_remaining, 0),
+      usersLimitReached:
+        tenant.users_limit_reached ?? (tenant.users_count ?? 0) >= (tenant.max_users ?? 25),
+      dashboardsLimitReached:
+        tenant.dashboards_limit_reached ?? (tenant.dashboards_count ?? 0) >= (tenant.max_dashboards ?? 20),
+      supportLimitReached:
+        tenant.support_limit_reached ??
+        (toNumber(tenant.support_hours_total, 0) > 0
+          ? toNumber(tenant.support_hours_consumed, 0) >= toNumber(tenant.support_hours_total, 0)
+          : toNumber(tenant.support_hours_consumed, 0) > 0),
+      usersUsagePercent:
+        tenant.users_usage_percent ??
+        Math.min(999, Math.round(((tenant.users_count ?? 0) / Math.max(tenant.max_users ?? 25, 1)) * 100)),
+      dashboardsUsagePercent:
+        tenant.dashboards_usage_percent ??
+        Math.min(999, Math.round(((tenant.dashboards_count ?? 0) / Math.max(tenant.max_dashboards ?? 20, 1)) * 100)),
+      supportUsagePercent:
+        tenant.support_usage_percent ??
+        (toNumber(tenant.support_hours_total, 0) > 0
+          ? Math.min(
+              999,
+              Math.round(
+                (toNumber(tenant.support_hours_consumed, 0) /
+                  Math.max(toNumber(tenant.support_hours_total, 0), 1)) *
+                  100,
+              ),
+            )
+          : 0),
+      brandingConfigured: false,
+      createdAt: tenant.created_at,
+    }
+  })
+
+  const users: User[] = usersRaw.map(mapUser)
+  const userNameById = new Map(users.map((user) => [user.id, `${user.firstName} ${user.lastName}`]))
+
+  const workspaces: Workspace[] = workspacesRaw.map((workspace) => ({
+    id: workspace.id,
+    tenantId: workspace.tenant,
+    tenantName: workspace.tenant_name,
+    name: workspace.name,
+    externalWorkspaceId: workspace.external_workspace_id,
+    status: workspace.status,
+    lastSyncAt: workspace.last_sync_at ?? new Date().toISOString(),
+    dashboardsCount: workspace.dashboards_count ?? 0,
+  }))
+  const workspaceNameById = new Map(workspaces.map((workspace) => [workspace.id, workspace.name]))
+
+  const accessLogs: AccessLog[] = accessLogsRaw.map(mapAccessLog)
+
+  const viewsByDashboardId = accessLogsRaw.reduce<Record<string, number>>((acc, log) => {
+    if (!log.dashboard || log.status !== 'success') return acc
+    const date = new Date(log.accessed_at)
+    const days = (Date.now() - date.getTime()) / (1000 * 60 * 60 * 24)
+    if (days > 7) return acc
+    acc[log.dashboard] = (acc[log.dashboard] ?? 0) + 1
+    return acc
+  }, {})
+
+  const dashboards: Dashboard[] = dashboardsRaw.map((dashboard) => ({
+    id: dashboard.id,
+    tenantId: dashboard.tenant,
+    tenantName: dashboard.tenant_name,
+    name: dashboard.name,
+    workspace: workspaceNameById.get(dashboard.workspace) ?? dashboard.workspace_name,
+    category: dashboard.category,
+    status: dashboard.status,
+    updatedAt: dashboard.updated_at,
+    views7d: viewsByDashboardId[dashboard.id] ?? 0,
+    description: dashboard.description,
+    workspaceId: dashboard.workspace,
+    reportId: dashboard.report_id,
+    datasetId: dashboard.dataset_id,
+    embedUrl: dashboard.embed_url,
+    refreshSchedule: dashboard.refresh_schedule ?? '',
+    tags: dashboard.tags ?? [],
+  }))
+  const dashboardNameById = new Map(dashboards.map((dashboard) => [dashboard.id, dashboard.name]))
+
+  const groups: UserGroup[] = groupsRaw.map((group) => ({
+    id: group.id,
+    tenantId: group.tenant,
+    tenantName: tenantById.get(group.tenant) ?? 'Tenant',
+    name: group.name,
+    description: group.description,
+    users:
+      group.member_names && group.member_names.length > 0
+        ? group.member_names
+        : group.members.map((memberId) => userNameById.get(memberId) ?? memberId),
+    dashboards:
+      group.dashboard_names && group.dashboard_names.length > 0
+        ? group.dashboard_names
+        : group.dashboards.map((dashboardId) => dashboardNameById.get(dashboardId) ?? dashboardId),
+  }))
+
+  const dashboardColumns: DashboardColumn[] = dashboardColumnsRaw.map((column) => ({
+    id: column.id,
+    dashboardId: column.dashboard,
+    name: column.name,
+    label: column.label,
+    dataType: 'string',
+    values: column.values ?? [],
+  }))
+
+  const rlsRules: RLSRule[] = rlsRulesRaw.map((rule) => ({
+    id: rule.id,
+    tenantId: rule.tenant,
+    dashboardId: rule.dashboard,
+    userId: rule.user,
+    tableName: rule.table_name ?? '',
+    columnName: rule.column_name,
+    operator: rule.operator ?? (rule.rule_type === 'deny' ? 'not_in' : 'in'),
+    ruleType: rule.rule_type,
+    values: rule.values,
+    notes: rule.notes,
+    isActive: rule.is_active,
+    createdAt: rule.created_at,
+    updatedAt: rule.updated_at,
+  }))
+
+  const brandings: TenantBranding[] = brandingsRaw.map((branding) => ({
+    id: branding.id,
+    tenantId: branding.tenant,
+    tenantName: branding.tenant_name,
+    platformName: branding.platform_name,
+    primaryColor: branding.primary_color,
+    secondaryColor: branding.secondary_color,
+    domain: branding.domain,
+    logoUrl: branding.logo_url,
+    faviconUrl: branding.favicon_url,
+  }))
+  const brandingTenantIds = new Set(brandings.map((branding) => branding.tenantId))
+  const tenantsWithBranding = tenants.map((tenant) => ({
+    ...tenant,
+    brandingConfigured: brandingTenantIds.has(tenant.id),
+  }))
+
+  return {
+    tenants: tenantsWithBranding,
+    users,
+    dashboards,
+    groups,
+    accessLogs,
+    brandings,
+    workspaces,
+    dashboardColumns,
+    rlsRules,
+    activities: buildActivities(accessLogs, dashboards),
+    accessSeries: buildAccessSeries(accessLogs),
+    roleIds: buildRoleIds(rolesRaw),
+  }
+}
+
 type BackendAuditActivity = {
   id: string
   kind: 'access' | 'event'
@@ -702,187 +886,55 @@ export const platformApi = {
   async fetchBootstrap(options?: { userRole?: UserRole }): Promise<BootstrapPayload> {
     void options
     const bootstrap = await apiRequest<BackendBootstrapPayload>('/bootstrap/')
-    const tenantsRaw = bootstrap.tenants
-    const usersRaw = bootstrap.users
-    const workspacesRaw = bootstrap.workspaces
-    const dashboardsRaw = bootstrap.dashboards
-    const dashboardColumnsRaw = bootstrap.dashboard_columns
-    const groupsRaw = bootstrap.groups
-    const accessLogsRaw = bootstrap.access_logs
-    const brandingsRaw = bootstrap.brandings
-    const rlsRulesRaw = bootstrap.rls_rules
-    const rolesRaw = bootstrap.roles
+    return buildBootstrapPayload(bootstrap)
+  },
 
-    const tenantById = new Map<string, string>()
-    const tenants: Tenant[] = tenantsRaw.map((tenant) => {
-      tenantById.set(tenant.id, tenant.name)
-      return {
-        id: tenant.id,
-        name: tenant.name,
-        status: normalizeTenantStatus(tenant.status),
-        usersCount: tenant.users_count ?? 0,
-        dashboardsCount: tenant.dashboards_count ?? 0,
-        maxUsers: tenant.max_users ?? 25,
-        maxDashboards: tenant.max_dashboards ?? 20,
-        supportHoursTotal: toNumber(tenant.support_hours_total, 0),
-        supportHoursConsumed: toNumber(tenant.support_hours_consumed, 0),
-        supportHoursRemaining: toNumber(tenant.support_hours_remaining, 0),
-        usersLimitReached:
-          tenant.users_limit_reached ?? (tenant.users_count ?? 0) >= (tenant.max_users ?? 25),
-        dashboardsLimitReached:
-          tenant.dashboards_limit_reached ?? (tenant.dashboards_count ?? 0) >= (tenant.max_dashboards ?? 20),
-        supportLimitReached:
-          tenant.support_limit_reached ??
-          (toNumber(tenant.support_hours_total, 0) > 0
-            ? toNumber(tenant.support_hours_consumed, 0) >= toNumber(tenant.support_hours_total, 0)
-            : toNumber(tenant.support_hours_consumed, 0) > 0),
-        usersUsagePercent:
-          tenant.users_usage_percent ??
-          Math.min(999, Math.round(((tenant.users_count ?? 0) / Math.max(tenant.max_users ?? 25, 1)) * 100)),
-        dashboardsUsagePercent:
-          tenant.dashboards_usage_percent ??
-          Math.min(999, Math.round(((tenant.dashboards_count ?? 0) / Math.max(tenant.max_dashboards ?? 20, 1)) * 100)),
-        supportUsagePercent:
-          tenant.support_usage_percent ??
-          (toNumber(tenant.support_hours_total, 0) > 0
-            ? Math.min(
-                999,
-                Math.round(
-                  (toNumber(tenant.support_hours_consumed, 0) /
-                    Math.max(toNumber(tenant.support_hours_total, 0), 1)) *
-                    100,
-                ),
-              )
-            : 0),
-        brandingConfigured: false,
-        createdAt: tenant.created_at,
-      }
-    })
-
-    const users: User[] = usersRaw.map(mapUser)
-    const userNameById = new Map(users.map((user) => [user.id, `${user.firstName} ${user.lastName}`]))
-
-    const workspaces: Workspace[] = workspacesRaw.map((workspace) => ({
-      id: workspace.id,
-      tenantId: workspace.tenant,
-      tenantName: workspace.tenant_name,
-      name: workspace.name,
-      externalWorkspaceId: workspace.external_workspace_id,
-      status: workspace.status,
-      lastSyncAt: workspace.last_sync_at ?? new Date().toISOString(),
-      dashboardsCount: workspace.dashboards_count ?? 0,
-    }))
-    const workspaceNameById = new Map(workspaces.map((workspace) => [workspace.id, workspace.name]))
-
-    const accessLogs: AccessLog[] = accessLogsRaw.map(mapAccessLog)
-
-    const viewsByDashboardId = accessLogsRaw.reduce<Record<string, number>>((acc, log) => {
-      if (!log.dashboard || log.status !== 'success') return acc
-      const date = new Date(log.accessed_at)
-      const days = (Date.now() - date.getTime()) / (1000 * 60 * 60 * 24)
-      if (days > 7) return acc
-      acc[log.dashboard] = (acc[log.dashboard] ?? 0) + 1
-      return acc
-    }, {})
-
-    const dashboards: Dashboard[] = dashboardsRaw.map((dashboard) => ({
-      id: dashboard.id,
-      tenantId: dashboard.tenant,
-      tenantName: dashboard.tenant_name,
-      name: dashboard.name,
-      workspace: workspaceNameById.get(dashboard.workspace) ?? dashboard.workspace_name,
-      category: dashboard.category,
-      status: dashboard.status,
-      updatedAt: dashboard.updated_at,
-      views7d: viewsByDashboardId[dashboard.id] ?? 0,
-      description: dashboard.description,
-      workspaceId: dashboard.workspace,
-      reportId: dashboard.report_id,
-      datasetId: dashboard.dataset_id,
-      embedUrl: dashboard.embed_url,
-      refreshSchedule: dashboard.refresh_schedule ?? '',
-      tags: dashboard.tags ?? [],
-    }))
-    const dashboardNameById = new Map(dashboards.map((dashboard) => [dashboard.id, dashboard.name]))
-
-    const groups: UserGroup[] = groupsRaw.map((group) => ({
-      id: group.id,
-      tenantId: group.tenant,
-      tenantName: tenantById.get(group.tenant) ?? 'Tenant',
-      name: group.name,
-      description: group.description,
-      users:
-        group.member_names && group.member_names.length > 0
-          ? group.member_names
-          : group.members.map((memberId) => userNameById.get(memberId) ?? memberId),
-      dashboards:
-        group.dashboard_names && group.dashboard_names.length > 0
-          ? group.dashboard_names
-          : group.dashboards.map((dashboardId) => dashboardNameById.get(dashboardId) ?? dashboardId),
-    }))
-
-    const dashboardColumns: DashboardColumn[] = dashboardColumnsRaw.map((column) => ({
-      id: column.id,
-      dashboardId: column.dashboard,
-      name: column.name,
-      label: column.label,
-      dataType: 'string',
-      values: column.values ?? [],
-    }))
-
-    const rlsRules: RLSRule[] = rlsRulesRaw.map((rule) => ({
-      id: rule.id,
-      tenantId: rule.tenant,
-      dashboardId: rule.dashboard,
-      userId: rule.user,
-      tableName: rule.table_name ?? '',
-      columnName: rule.column_name,
-      operator: rule.operator ?? (rule.rule_type === 'deny' ? 'not_in' : 'in'),
-      ruleType: rule.rule_type,
-      values: rule.values,
-      notes: rule.notes,
-      isActive: rule.is_active,
-      createdAt: rule.created_at,
-      updatedAt: rule.updated_at,
-    }))
-
-    const brandings: TenantBranding[] = brandingsRaw.map((branding) => ({
-      id: branding.id,
-      tenantId: branding.tenant,
-      tenantName: branding.tenant_name,
-      platformName: branding.platform_name,
-      primaryColor: branding.primary_color,
-      secondaryColor: branding.secondary_color,
-      domain: branding.domain,
-      logoUrl: branding.logo_url,
-      faviconUrl: branding.favicon_url,
-    }))
-    const brandingTenantIds = new Set(brandings.map((branding) => branding.tenantId))
-    const tenantsWithBranding = tenants.map((tenant) => ({
-      ...tenant,
-      brandingConfigured: brandingTenantIds.has(tenant.id),
-    }))
-
-    const roleIds: Record<UserRole, string> = {
-      super_admin: rolesRaw.find((role) => role.code === 'super_admin')?.id ?? '',
-      analyst: rolesRaw.find((role) => role.code === 'analyst')?.id ?? '',
-      viewer: rolesRaw.find((role) => role.code === 'viewer')?.id ?? '',
-    }
-
-    return {
-      tenants: tenantsWithBranding,
+  async fetchBootstrapFallback(options?: { userRole?: UserRole }): Promise<BootstrapPayload> {
+    void options
+    const [
+      brandings,
+      tenants,
       users,
+      workspaces,
       dashboards,
+      dashboardColumns,
       groups,
       accessLogs,
-      brandings,
-      workspaces,
-      dashboardColumns,
       rlsRules,
-      activities: buildActivities(accessLogs, dashboards),
-      accessSeries: buildAccessSeries(accessLogs),
-      roleIds,
-    }
+      roles,
+    ] = await Promise.all([
+      optionalList<BackendBranding>('/branding/'),
+      optionalList<BackendTenant>('/tenants/'),
+      optionalList<BackendUser>('/users/'),
+      optionalList<BackendWorkspace>('/workspaces/'),
+      optionalList<BackendDashboard>('/dashboards/'),
+      optionalList<BackendDashboardColumn>('/dashboards/columns/'),
+      optionalList<BackendGroup>('/users/groups/'),
+      optionalList<BackendAccessLog>('/audit/logs/'),
+      optionalList<BackendRLSRule>('/permissions/rls-rules/'),
+      optionalList<BackendRole>('/permissions/roles/'),
+    ])
+
+    appLogger.warn('Bootstrap carregado via fallback por recursos individuais', {
+      tenants: tenants.length,
+      users: users.length,
+      dashboards: dashboards.length,
+      groups: groups.length,
+    })
+
+    return buildBootstrapPayload({
+      request_id: 'bootstrap-fallback',
+      tenants,
+      users,
+      workspaces,
+      dashboards,
+      dashboard_columns: dashboardColumns,
+      groups,
+      access_logs: accessLogs,
+      brandings,
+      rls_rules: rlsRules,
+      roles,
+    })
   },
 
   upsertTenant(payload: Record<string, unknown> & { id?: string }) {

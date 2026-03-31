@@ -108,6 +108,18 @@ const initialState: PersistedState = {
 }
 
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms))
+const isRecoverableBootstrapError = (message: string) => {
+  const normalized = message.toLowerCase()
+  return (
+    normalized.includes('erro interno do servidor') ||
+    normalized.includes('nao foi possivel conectar com a api') ||
+    normalized.includes('tempo limite excedido') ||
+    normalized.includes('503') ||
+    normalized.includes('504') ||
+    normalized.includes('502') ||
+    normalized.includes('500')
+  )
+}
 
 export const PlatformStoreContext = createContext<PlatformStoreValue | undefined>(undefined)
 
@@ -130,7 +142,11 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
       try {
         return await platformApi.fetchBootstrap({ userRole: user?.role })
       } catch {
-        throw firstError
+        const message = firstError instanceof Error ? firstError.message : 'Erro interno do servidor.'
+        if (!isRecoverableBootstrapError(message)) {
+          throw firstError
+        }
+        return await platformApi.fetchBootstrapFallback({ userRole: user?.role })
       }
     }
   }, [user?.role])
