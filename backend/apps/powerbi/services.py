@@ -254,13 +254,26 @@ class PowerBIClient:
         self,
         workspace_id: str,
         report_id: str,
+        dataset_id: str | None = None,
     ):
-        payload = {'accessLevel': 'View'}
-        data = self._request(
-            'POST',
-            f'groups/{workspace_id}/reports/{report_id}/GenerateToken',
-            payload=payload,
-        )
+        if dataset_id:
+            payload = {
+                'reports': [{'id': report_id}],
+                'datasets': [{'id': dataset_id}],
+                'targetWorkspaces': [{'id': workspace_id}],
+            }
+            data = self._request(
+                'POST',
+                'GenerateToken',
+                payload=payload,
+            )
+        else:
+            payload = {'accessLevel': 'View'}
+            data = self._request(
+                'POST',
+                f'groups/{workspace_id}/reports/{report_id}/GenerateToken',
+                payload=payload,
+            )
 
         token = data.get('token')
         if not token:

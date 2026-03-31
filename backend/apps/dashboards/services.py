@@ -103,6 +103,7 @@ class PowerBIEmbedService:
                 token_payload = client.generate_embed_token(
                     workspace_id=workspace_external_id,
                     report_id=dashboard.report_id,
+                    dataset_id=dashboard.dataset_id,
                 )
             except PowerBIServiceError as exc:
                 if self._is_entity_not_found(exc):
@@ -120,6 +121,7 @@ class PowerBIEmbedService:
                     token_payload = client.generate_embed_token(
                         workspace_id=workspace_external_id,
                         report_id=dashboard.report_id,
+                        dataset_id=dashboard.dataset_id,
                     )
                 else:
                     raise EmbedIntegrationError(str(exc)) from exc
