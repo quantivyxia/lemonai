@@ -260,7 +260,6 @@ class PowerBIClient:
             payload = {
                 'reports': [{'id': report_id}],
                 'datasets': [{'id': dataset_id}],
-                'targetWorkspaces': [{'id': workspace_id}],
             }
             data = self._request(
                 'POST',
