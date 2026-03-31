@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+from django.db import transaction
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -53,6 +54,17 @@ class PowerBIConnectionViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         return None
+
+    def _delete_orphan_dashboards(self, connection, workspace, active_report_ids):
+        orphan_dashboards = Dashboard.objects.filter(
+            tenant=connection.tenant,
+            workspace=workspace,
+        ).exclude(report_id='').exclude(report_id__in=sorted(active_report_ids))
+        deleted_count = orphan_dashboards.count()
+        deleted_names = list(orphan_dashboards.values_list('name', flat=True)[:20])
+        if deleted_count:
+            orphan_dashboards.delete()
+        return deleted_count, deleted_names
 
     def get_queryset(self):
         queryset = PowerBIConnection.objects.select_related('tenant')
@@ -204,69 +216,75 @@ class PowerBIConnectionViewSet(viewsets.ModelViewSet):
         client = PowerBIClient(connection)
 
         try:
-            workspace_response = self._filter_connection_workspaces(connection, client.list_workspaces())
-            workspace_name = next(
-                (workspace.get('name') for workspace in workspace_response if str(workspace.get('id')) == workspace_id),
-                'Workspace importado',
-            )
-            workspace, _ = Workspace.objects.update_or_create(
-                tenant=connection.tenant,
-                external_workspace_id=workspace_id,
-                defaults={
-                    'name': workspace_name,
-                    'status': WorkspaceStatus.ACTIVE,
-                },
-            )
-
-            reports = client.list_reports(workspace_id)
-            created = 0
-            updated = 0
-            skipped_by_limit = 0
-            max_dashboards = connection.tenant.max_dashboards
-            tenant_dashboards_count = Dashboard.objects.filter(tenant=connection.tenant).count()
-            for report in reports:
-                report_id = str(report.get('id', ''))
-                if not report_id:
-                    continue
-                name = report.get('name') or f'Report {report_id[:6]}'
-                defaults = {
-                    'workspace': workspace,
-                    'name': name,
-                    'description': '',
-                    'category': category,
-                    'status': status_value,
-                    'embed_url': report.get('embedUrl') or '',
-                    'dataset_id': report.get('datasetId') or '',
-                    'external_workspace_id': workspace.external_workspace_id,
-                }
-                dashboard = Dashboard.objects.filter(tenant=connection.tenant, report_id=report_id).first()
-                if dashboard:
-                    for attr, value in defaults.items():
-                        setattr(dashboard, attr, value)
-                    dashboard.save()
-                    updated += 1
-                    continue
-
-                dashboard = Dashboard.objects.filter(tenant=connection.tenant, name=name).first()
-                if dashboard:
-                    for attr, value in defaults.items():
-                        setattr(dashboard, attr, value)
-                    dashboard.report_id = report_id
-                    dashboard.save()
-                    updated += 1
-                    continue
-
-                if tenant_dashboards_count >= max_dashboards:
-                    skipped_by_limit += 1
-                    continue
-
-                Dashboard.objects.create(
-                    tenant=connection.tenant,
-                    report_id=report_id,
-                    **defaults,
+            with transaction.atomic():
+                workspace_response = self._filter_connection_workspaces(connection, client.list_workspaces())
+                workspace_name = next(
+                    (workspace.get('name') for workspace in workspace_response if str(workspace.get('id')) == workspace_id),
+                    'Workspace importado',
                 )
-                created += 1
-                tenant_dashboards_count += 1
+                workspace, _ = Workspace.objects.update_or_create(
+                    tenant=connection.tenant,
+                    external_workspace_id=workspace_id,
+                    defaults={
+                        'name': workspace_name,
+                        'status': WorkspaceStatus.ACTIVE,
+                    },
+                )
+
+                reports = client.list_reports(workspace_id)
+                created = 0
+                updated = 0
+                skipped_by_limit = 0
+                active_report_ids: set[str] = set()
+                max_dashboards = connection.tenant.max_dashboards
+                tenant_dashboards_count = Dashboard.objects.filter(tenant=connection.tenant).count()
+                for report in reports:
+                    report_id = str(report.get('id', '')).strip()
+                    if not report_id:
+                        continue
+                    active_report_ids.add(report_id)
+                    name = (report.get('name') or f'Report {report_id[:6]}').strip()
+                    defaults = {
+                        'workspace': workspace,
+                        'name': name,
+                        'description': '',
+                        'category': category,
+                        'status': status_value,
+                        'embed_url': report.get('embedUrl') or '',
+                        'dataset_id': report.get('datasetId') or '',
+                        'external_workspace_id': workspace.external_workspace_id,
+                        'last_sync_at': timezone.now(),
+                    }
+                    dashboard = Dashboard.objects.filter(tenant=connection.tenant, report_id=report_id).first()
+                    if dashboard:
+                        for attr, value in defaults.items():
+                            setattr(dashboard, attr, value)
+                        dashboard.save()
+                        updated += 1
+                        continue
+
+                    dashboard = Dashboard.objects.filter(tenant=connection.tenant, name=name).first()
+                    if dashboard:
+                        for attr, value in defaults.items():
+                            setattr(dashboard, attr, value)
+                        dashboard.report_id = report_id
+                        dashboard.save()
+                        updated += 1
+                        continue
+
+                    if tenant_dashboards_count >= max_dashboards:
+                        skipped_by_limit += 1
+                        continue
+
+                    Dashboard.objects.create(
+                        tenant=connection.tenant,
+                        report_id=report_id,
+                        **defaults,
+                    )
+                    created += 1
+                    tenant_dashboards_count += 1
+
+                deleted, deleted_names = self._delete_orphan_dashboards(connection, workspace, active_report_ids)
 
             connection.last_sync_at = timezone.now()
             connection.last_error = ''
@@ -276,6 +294,8 @@ class PowerBIConnectionViewSet(viewsets.ModelViewSet):
                     'detail': 'Reports sincronizados com sucesso.',
                     'created': created,
                     'updated': updated,
+                    'deleted': deleted,
+                    'deleted_names': deleted_names,
                     'skipped_by_limit': skipped_by_limit,
                     'limit': max_dashboards,
                 }
