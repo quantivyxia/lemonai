@@ -139,7 +139,6 @@ export const DashboardViewPage = () => {
       accessToken: embedConfig.accessToken,
       embedUrl: embedConfig.embedUrl,
       id: embedConfig.reportId,
-      filters: reportFilters,
       settings: {
         panes: {
           filters: { visible: false },
@@ -154,10 +153,15 @@ export const DashboardViewPage = () => {
     report.on('loaded', async () => {
       if (reportFilters.length === 0) return
       try {
-        await (report as { updateFilters?: (op: models.FiltersOperations, filters: models.IFilter[]) => Promise<void> }).updateFilters?.(
-          models.FiltersOperations.ReplaceAll,
-          reportFilters,
-        )
+        const reportWithFilters = report as {
+          updateFilters?: (op: models.FiltersOperations, filters: models.IFilter[]) => Promise<void>
+          setFilters?: (filters: models.IFilter[]) => Promise<void>
+        }
+        if (reportWithFilters.updateFilters) {
+          await reportWithFilters.updateFilters(models.FiltersOperations.ReplaceAll, reportFilters)
+        } else if (reportWithFilters.setFilters) {
+          await reportWithFilters.setFilters(reportFilters)
+        }
       } catch {
         toast.error('Nao foi possivel aplicar filtros de pagina do dashboard.')
       }
