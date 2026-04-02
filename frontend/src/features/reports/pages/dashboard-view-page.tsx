@@ -21,9 +21,25 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { usePlatformStore } from '@/hooks/use-platform-store'
+import { appLogger } from '@/services/app-logger'
 import { platformApi, type DashboardEmbedConfig } from '@/services/platform-api'
 
 type EmbedState = 'loading' | 'ready' | 'error'
+
+const safeResetPowerBIContainer = (powerBIService: service.Service, container: HTMLDivElement) => {
+  try {
+    powerBIService.reset(container)
+  } catch (error) {
+    appLogger.warn('Falha ao limpar o container do Power BI. Aplicando limpeza manual do DOM.', {
+      message: error instanceof Error ? error.message : 'unknown',
+    })
+    try {
+      container.replaceChildren()
+    } catch {
+      container.innerHTML = ''
+    }
+  }
+}
 
 export const DashboardViewPage = () => {
   const { dashboards } = usePlatformStore()
@@ -31,7 +47,9 @@ export const DashboardViewPage = () => {
   const [embedState, setEmbedState] = useState<EmbedState>('loading')
   const [embedConfig, setEmbedConfig] = useState<DashboardEmbedConfig | null>(null)
   const embedHostRef = useRef<HTMLDivElement | null>(null)
+  const fullscreenContainerRef = useRef<HTMLDivElement | null>(null)
   const powerBIServiceRef = useRef<service.Service | null>(null)
+  const [isFullscreen, setIsFullscreen] = useState(false)
 
   const dashboard = useMemo(
     () => dashboards.find((item) => item.id === dashboardId) ?? null,
@@ -81,7 +99,7 @@ export const DashboardViewPage = () => {
   }
 
   const handleFullScreen = () => {
-    const targetElement = document.getElementById('embed-container')
+    const targetElement = fullscreenContainerRef.current
     if (!targetElement) return
     if (document.fullscreenElement) {
       void document.exitFullscreen()
@@ -89,6 +107,17 @@ export const DashboardViewPage = () => {
     }
     void targetElement.requestFullscreen()
   }
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === fullscreenContainerRef.current)
+    }
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange)
+    }
+  }, [])
 
   useEffect(() => {
     if (embedState !== 'ready' || !embedConfig || !embedHostRef.current) return
@@ -103,9 +132,9 @@ export const DashboardViewPage = () => {
     }
 
     const powerBIService = powerBIServiceRef.current
-    powerBIService.reset(container)
+    safeResetPowerBIContainer(powerBIService, container)
 
-    const reportFilters: models.IFilter[] = (embedConfig.reportFilters ?? []).map((rule) => ({
+    const reportFilters: models.IFilter[] = embedConfig.reportFilters.map((rule) => ({
       $schema: 'http://powerbi.com/product/schema#basic',
       target: {
         table: rule.table,
@@ -123,7 +152,6 @@ export const DashboardViewPage = () => {
       accessToken: embedConfig.accessToken,
       embedUrl: embedConfig.embedUrl,
       id: embedConfig.reportId,
-      filters: reportFilters,
       settings: {
         panes: {
           filters: { visible: false },
@@ -138,10 +166,15 @@ export const DashboardViewPage = () => {
     report.on('loaded', async () => {
       if (reportFilters.length === 0) return
       try {
-        await (report as { updateFilters?: (op: models.FiltersOperations, filters: models.IFilter[]) => Promise<void> }).updateFilters?.(
-          models.FiltersOperations.ReplaceAll,
-          reportFilters,
-        )
+        const reportWithFilters = report as {
+          updateFilters?: (op: models.FiltersOperations, filters: models.IFilter[]) => Promise<void>
+          setFilters?: (filters: models.IFilter[]) => Promise<void>
+        }
+        if (reportWithFilters.updateFilters) {
+          await reportWithFilters.updateFilters(models.FiltersOperations.ReplaceAll, reportFilters)
+        } else if (reportWithFilters.setFilters) {
+          await reportWithFilters.setFilters(reportFilters)
+        }
       } catch {
         toast.error('Nao foi possivel aplicar filtros de pagina do dashboard.')
       }
@@ -157,7 +190,7 @@ export const DashboardViewPage = () => {
     return () => {
       report.off('loaded')
       report.off('error')
-      powerBIService.reset(container)
+      safeResetPowerBIContainer(powerBIService, container)
     }
   }, [embedConfig, embedState])
 
@@ -225,9 +258,6 @@ export const DashboardViewPage = () => {
               <RefreshCcw className="h-4 w-4" />
               Atualizar token
             </Button>
-            <Button variant="outline" className="gap-2" onClick={() => setEmbedState('error')}>
-              Simular erro
-            </Button>
             <Button className="gap-2" onClick={handleFullScreen}>
               <Maximize2 className="h-4 w-4" />
               Tela cheia
@@ -237,8 +267,8 @@ export const DashboardViewPage = () => {
       />
 
       <div className="grid gap-4 lg:grid-cols-1">
-        <Card id="embed-container">
-          <CardHeader className="pb-3">
+        <Card>
+          <CardHeader className="pb-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="neutral">{dashboard.tenantName}</Badge>
@@ -255,29 +285,38 @@ export const DashboardViewPage = () => {
             </div>
           </CardHeader>
           <CardContent className="px-3 pb-3 pt-0 sm:px-4">
-            <div className="relative h-[calc(100vh-245px)] min-h-[640px] overflow-hidden rounded-2xl border border-primary/20 bg-muted/20 p-2">
+            <div
+              ref={fullscreenContainerRef}
+              className={`relative overflow-hidden border border-primary/20 bg-muted/20 transition-all ${
+                isFullscreen
+                  ? 'h-screen min-h-screen rounded-none border-0 bg-white p-0'
+                  : 'h-[calc(100vh-205px)] min-h-[720px] rounded-2xl p-2'
+              }`}
+            >
               {embedState === 'loading' ? (
                 <>
-                  <Skeleton className="h-full w-full rounded-xl" />
+                  <Skeleton className={`h-full w-full ${isFullscreen ? 'rounded-none' : 'rounded-xl'}`} />
                   <p className="mt-3 text-sm text-muted-foreground">Carregando configuracao de embed segura...</p>
                 </>
               ) : null}
 
               {embedState === 'ready' ? (
-                <div className="flex h-full min-h-0 flex-col rounded-xl border border-border/70 bg-white p-2">
-                  <div className="mb-3 flex items-center justify-between">
-                    <p className="text-sm font-semibold text-slate-900">Power BI Embedded</p>
-                    <Badge>{embedConfig?.accessToken.startsWith('demo-embed-token') ? 'Token demo' : 'Token real'}</Badge>
-                  </div>
+                <div
+                  className={`h-full bg-white ${isFullscreen ? 'rounded-none border-0 p-0' : 'rounded-xl border border-border/70 p-2'}`}
+                >
                   <div
                     ref={embedHostRef}
-                    className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border/60"
+                    className={`h-full overflow-hidden ${isFullscreen ? 'rounded-none border-0' : 'rounded-lg border border-border/60'}`}
                   />
                 </div>
               ) : null}
 
               {embedState === 'error' ? (
-                <div className="flex h-full flex-col items-center justify-center rounded-xl border border-rose-200 bg-rose-50/70 p-4 text-center">
+                <div
+                  className={`flex h-full flex-col items-center justify-center border border-rose-200 bg-rose-50/70 p-4 text-center ${
+                    isFullscreen ? 'rounded-none border-x-0 border-y-0' : 'rounded-xl'
+                  }`}
+                >
                   <AlertTriangle className="h-7 w-7 text-rose-600" />
                   <p className="mt-2 font-semibold text-rose-800">Falha ao carregar dashboard</p>
                   <p className="mt-1 max-w-sm text-sm text-rose-700">

@@ -18,26 +18,26 @@ export const DashboardHomePage = () => {
 
   const scopedUsers = useMemo(
     () => filterByTenant(users, (item) => ({ tenantId: item.tenantId })),
-    [filterByTenant],
+    [filterByTenant, users],
   )
   const scopedDashboards = useMemo(
     () => filterByTenant(dashboards, (item) => ({ tenantId: item.tenantId })),
-    [filterByTenant],
+    [filterByTenant, dashboards],
   )
   const scopedTenants = useMemo(
     () => filterByTenant(tenants, (item) => ({ tenantId: item.id })),
-    [filterByTenant],
+    [filterByTenant, tenants],
   )
   const scopedLogs = useMemo(
     () => filterByTenant(accessLogs, (item) => ({ tenantId: item.tenantId })),
-    [filterByTenant],
+    [filterByTenant, accessLogs],
   )
   const scopedActivities = useMemo(
     () =>
       filterByTenant(activities, (item) => ({
         tenantId: item.tenantId,
       })),
-    [filterByTenant],
+    [filterByTenant, activities],
   )
 
   const kpiMetrics = {
@@ -74,7 +74,7 @@ export const DashboardHomePage = () => {
       date: point.date,
       accesses: byDate[point.date] ?? 0,
     }))
-  }, [isSuperAdmin, scopedLogs])
+  }, [accessSeries, isSuperAdmin, scopedLogs])
 
   const globalLimitAlerts = useMemo(() => {
     if (!isSuperAdmin) return []

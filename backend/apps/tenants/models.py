@@ -17,6 +17,8 @@ class Tenant(UUIDTimeStampedModel):
     status = models.CharField(max_length=20, choices=TenantStatus.choices, default=TenantStatus.ACTIVE)
     max_users = models.PositiveIntegerField(default=25)
     max_dashboards = models.PositiveIntegerField(default=20)
+    support_hours_total = models.DecimalField(max_digits=8, decimal_places=1, default=0)
+    support_hours_consumed = models.DecimalField(max_digits=8, decimal_places=1, default=0)
 
     # Preparacao para Power BI Embedded por tenant
     powerbi_workspace_id = models.CharField(max_length=150, blank=True)

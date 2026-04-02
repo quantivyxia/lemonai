@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import time
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -15,6 +16,8 @@ from apps.powerbi.models import (
     PowerBIGateway,
     PowerBIGatewayDataSource,
 )
+
+logger = logging.getLogger('insighthub.integration.powerbi')
 
 
 class PowerBIServiceError(Exception):
@@ -87,6 +90,15 @@ class PowerBIClient:
         }
         response = requests.post(self._token_endpoint(), data=payload, timeout=self.timeout_seconds)
         if response.status_code >= 400:
+            logger.warning(
+                'Power BI token request failed',
+                extra={
+                    'status_code': response.status_code,
+                    'tenant_id': str(self.connection.tenant_id),
+                    'event_category': 'integration',
+                    'event_action': 'powerbi.token.failed',
+                },
+            )
             raise PowerBIServiceError(self._parse_error(response))
 
         data = response.json()
@@ -100,6 +112,14 @@ class PowerBIClient:
             expires_at=now + timedelta(seconds=expires_in),
         )
         self._token = token
+        logger.info(
+            'Power BI token obtained',
+            extra={
+                'tenant_id': str(self.connection.tenant_id),
+                'event_category': 'integration',
+                'event_action': 'powerbi.token.success',
+            },
+        )
         return token
 
     def _request(self, method: str, path: str, params: dict | None = None, payload: dict | None = None):
@@ -118,10 +138,32 @@ class PowerBIClient:
             timeout=self.timeout_seconds,
         )
         if response.status_code >= 400:
+            logger.warning(
+                'Power BI API request failed',
+                extra={
+                    'method': method.upper(),
+                    'path': url,
+                    'status_code': response.status_code,
+                    'tenant_id': str(self.connection.tenant_id),
+                    'event_category': 'integration',
+                    'event_action': 'powerbi.request.failed',
+                },
+            )
             raise PowerBIServiceError(self._parse_error(response))
 
         if response.status_code == 204 or not response.text:
             return {}
+        logger.info(
+            'Power BI API request succeeded',
+            extra={
+                'method': method.upper(),
+                'path': url,
+                'status_code': response.status_code,
+                'tenant_id': str(self.connection.tenant_id),
+                'event_category': 'integration',
+                'event_action': 'powerbi.request.success',
+            },
+        )
         return response.json()
 
     def list_workspaces(self):
@@ -212,53 +254,25 @@ class PowerBIClient:
         self,
         workspace_id: str,
         report_id: str,
-        dataset_id: str,
-        user,
-        rls_context,
-        rls_payload: dict | None = None,
-        rls_roles: list[str] | None = None,
+        dataset_id: str | None = None,
     ):
-        payload = {'accessLevel': 'View'}
-        role_list = [role for role in (rls_roles or []) if isinstance(role, str) and role.strip()]
-        should_send_identity = bool(dataset_id and (rls_context or role_list))
-        if should_send_identity:
-            identity: dict[str, object] = {
-                'username': getattr(user, 'email', 'embed@insighthub.local'),
-                'datasets': [dataset_id],
+        if dataset_id:
+            payload = {
+                'reports': [{'id': report_id}],
+                'datasets': [{'id': dataset_id}],
             }
-
-            if role_list:
-                identity['roles'] = role_list
-
-            if rls_payload:
-                custom_data = str(rls_payload.get('tokenString') or '')
-                max_chars = int(os.getenv('POWERBI_RLS_CUSTOM_DATA_MAX_CHARS', '3500'))
-                if custom_data and len(custom_data) > max_chars:
-                    raise PowerBIServiceError(
-                        f'Payload RLS excedeu {max_chars} caracteres em customData. '
-                        'Reduza valores de regras ou aumente POWERBI_RLS_CUSTOM_DATA_MAX_CHARS.'
-                    )
-                if custom_data:
-                    identity['customData'] = custom_data
-
-            payload['identities'] = [
-                identity
-            ]
-
-        try:
+            data = self._request(
+                'POST',
+                'GenerateToken',
+                payload=payload,
+            )
+        else:
+            payload = {'accessLevel': 'View'}
             data = self._request(
                 'POST',
                 f'groups/{workspace_id}/reports/{report_id}/GenerateToken',
                 payload=payload,
             )
-        except PowerBIServiceError as exc:
-            message = str(exc).lower()
-            if should_send_identity and 'effective identity' in message:
-                raise PowerBIServiceError(
-                    'Falha de RLS no embed token: effective identity rejeitada pelo dataset/report. '
-                    'Verifique role do Power BI, permissao da service principal e regra DAX.'
-                )
-            raise
 
         token = data.get('token')
         if not token:

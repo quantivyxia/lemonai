@@ -9,15 +9,8 @@ import { z } from 'zod'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { useAuth } from '@/hooks/use-auth'
-
-const demoAccounts = [
-  { companyLabel: 'InsightHub Global (Dono)', email: 'dono@insighthub.com', password: '123456' },
-  { companyLabel: 'Nexa (Analista)', email: 'analista@nexa.com', password: '123456' },
-  { companyLabel: 'Nexa (Usuario)', email: 'usuario@nexa.com', password: '123456' },
-]
 
 const loginSchema = z.object({
   email: z.email('Informe um e-mail valido.'),
@@ -37,15 +30,13 @@ export const LoginForm = () => {
   const {
     register,
     handleSubmit,
-    setValue,
-    watch,
     formState: { errors, isSubmitting },
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      email: 'dono@insighthub.com',
-      password: '123456',
-      remember: true,
+      email: '',
+      password: '',
+      remember: false,
     },
   })
 
@@ -69,7 +60,7 @@ export const LoginForm = () => {
     >
       <Card className="border-border/70 shadow-floating">
         <CardHeader className="space-y-2">
-          <CardTitle>Entrar no InsightHub</CardTitle>
+          <CardTitle>Entrar no LemonAI</CardTitle>
           <CardDescription>Acesse seu portal analitico com seguranca e governanca.</CardDescription>
         </CardHeader>
         <CardContent>
@@ -106,41 +97,11 @@ export const LoginForm = () => {
               ) : null}
             </div>
 
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 text-sm text-slate-600">
-                <Checkbox
-                  checked={watch('remember')}
-                  onCheckedChange={(checked) => setValue('remember', Boolean(checked))}
-                />
-                Lembrar acesso
-              </label>
+            <div className="flex items-center justify-end">
               <button type="button" className="text-sm font-medium text-primary hover:underline">
                 Esqueceu a senha?
               </button>
             </div>
-
-            <div className="space-y-2 rounded-xl border border-border/70 bg-muted/25 p-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.05em] text-muted-foreground">
-                Acessos de demonstracao
-              </p>
-              <div className="flex flex-col gap-2">
-                {demoAccounts.map((credential) => (
-                  <button
-                    key={credential.email}
-                    type="button"
-                    className="rounded-lg border border-border/80 bg-white px-3 py-2 text-left text-xs transition hover:border-primary/35 hover:bg-primary/5"
-                    onClick={() => {
-                      setValue('email', credential.email)
-                      setValue('password', credential.password)
-                    }}
-                  >
-                    <p className="font-semibold text-slate-800">{credential.companyLabel}</p>
-                    <p className="mt-0.5 text-muted-foreground">{credential.email}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-
             <Button className="w-full" size="lg" type="submit" disabled={isSubmitting}>
               {isSubmitting ? 'Validando acesso...' : 'Entrar na plataforma'}
             </Button>

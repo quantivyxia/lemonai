@@ -1,24 +1,68 @@
+import { type ComponentType, type ReactNode, Suspense, lazy } from 'react'
 import { createBrowserRouter } from 'react-router-dom'
 
-import { AuditPage } from '@/features/audit/pages/audit-page'
-import { LoginPage } from '@/features/auth/pages/login-page'
-import { NotFoundPage } from '@/features/common/pages/not-found-page'
-import { DashboardHomePage } from '@/features/dashboard/pages/dashboard-home-page'
-import { DashboardsPage } from '@/features/dashboards/pages/dashboards-page'
-import { GroupsPage } from '@/features/groups/pages/groups-page'
-import { PermissionsPage } from '@/features/permissions/pages/permissions-page'
-import { PowerBIPage } from '@/features/powerbi/pages/powerbi-page'
-import { RLSRulesPage } from '@/features/rls/pages/rls-rules-page'
-import { DashboardViewPage } from '@/features/reports/pages/dashboard-view-page'
-import { WorkspacesPage } from '@/features/reports/pages/workspaces-page'
-import { BrandingPage } from '@/features/settings/pages/branding-page'
-import { PlatformSettingsPage } from '@/features/settings/pages/platform-settings-page'
-import { TenantsPage } from '@/features/tenants/pages/tenants-page'
-import { UsersPage } from '@/features/users/pages/users-page'
 import { AppShell } from '@/layouts/app-shell'
 import { AuthLayout } from '@/layouts/auth-layout'
 import { ProtectedRoute } from '@/routes/protected-route'
 import { RoleRoute } from '@/routes/role-route'
+
+const lazyPage = <T extends { [key: string]: ComponentType<object> }, K extends keyof T>(
+  loader: () => Promise<T>,
+  exportName: K,
+) =>
+  lazy(async () => {
+    const module = await loader()
+    return { default: module[exportName] as ComponentType<object> }
+  })
+
+const LoginPage = lazyPage(() => import('@/features/auth/pages/login-page'), 'LoginPage')
+const NotFoundPage = lazyPage(() => import('@/features/common/pages/not-found-page'), 'NotFoundPage')
+const RouteErrorPage = lazyPage(() => import('@/features/common/pages/route-error-page'), 'RouteErrorPage')
+const DashboardHomePage = lazyPage(
+  () => import('@/features/dashboard/pages/dashboard-home-page'),
+  'DashboardHomePage',
+)
+const DashboardsPage = lazyPage(() => import('@/features/dashboards/pages/dashboards-page'), 'DashboardsPage')
+const UsersPage = lazyPage(() => import('@/features/users/pages/users-page'), 'UsersPage')
+const TenantsPage = lazyPage(() => import('@/features/tenants/pages/tenants-page'), 'TenantsPage')
+const GroupsPage = lazyPage(() => import('@/features/groups/pages/groups-page'), 'GroupsPage')
+const PermissionsPage = lazyPage(
+  () => import('@/features/permissions/pages/permissions-page'),
+  'PermissionsPage',
+)
+const AuditPage = lazyPage(() => import('@/features/audit/pages/audit-page'), 'AuditPage')
+const SystemMonitoringPage = lazyPage(
+  () => import('@/features/monitoring/pages/system-monitoring-page'),
+  'SystemMonitoringPage',
+)
+const RLSRulesPage = lazyPage(() => import('@/features/rls/pages/rls-rules-page'), 'RLSRulesPage')
+const WorkspacesPage = lazyPage(
+  () => import('@/features/reports/pages/workspaces-page'),
+  'WorkspacesPage',
+)
+const TicketsPage = lazyPage(() => import('@/features/tickets/pages/tickets-page'), 'TicketsPage')
+const PowerBIPage = lazyPage(() => import('@/features/powerbi/pages/powerbi-page'), 'PowerBIPage')
+const BrandingPage = lazyPage(() => import('@/features/settings/pages/branding-page'), 'BrandingPage')
+const PlatformSettingsPage = lazyPage(
+  () => import('@/features/settings/pages/platform-settings-page'),
+  'PlatformSettingsPage',
+)
+const DashboardViewPage = lazyPage(
+  () => import('@/features/reports/pages/dashboard-view-page'),
+  'DashboardViewPage',
+)
+
+const withSuspense = (element: ReactNode) => (
+  <Suspense
+    fallback={
+      <div className="p-6 text-sm text-muted-foreground">
+        Carregando...
+      </div>
+    }
+  >
+    {element}
+  </Suspense>
+)
 
 const nonViewerRoles = ['super_admin', 'analyst'] as const
 
@@ -26,33 +70,35 @@ export const appRouter = createBrowserRouter([
   {
     path: '/auth',
     element: <AuthLayout />,
+    errorElement: withSuspense(<RouteErrorPage />),
     children: [
       {
         path: 'login',
-        element: <LoginPage />,
+        element: withSuspense(<LoginPage />),
       },
     ],
   },
   {
     path: '/',
     element: <ProtectedRoute />,
+    errorElement: withSuspense(<RouteErrorPage />),
     children: [
       {
         element: <AppShell />,
         children: [
           {
             index: true,
-            element: <DashboardHomePage />,
+            element: withSuspense(<DashboardHomePage />),
           },
           {
             path: 'dashboards',
-            element: <DashboardsPage />,
+            element: withSuspense(<DashboardsPage />),
           },
           {
             path: 'users',
             element: (
               <RoleRoute allowedRoles={[...nonViewerRoles]}>
-                <UsersPage />
+                {withSuspense(<UsersPage />)}
               </RoleRoute>
             ),
           },
@@ -60,7 +106,7 @@ export const appRouter = createBrowserRouter([
             path: 'tenants',
             element: (
               <RoleRoute allowedRoles={[...nonViewerRoles]}>
-                <TenantsPage />
+                {withSuspense(<TenantsPage />)}
               </RoleRoute>
             ),
           },
@@ -68,7 +114,7 @@ export const appRouter = createBrowserRouter([
             path: 'groups',
             element: (
               <RoleRoute allowedRoles={[...nonViewerRoles]}>
-                <GroupsPage />
+                {withSuspense(<GroupsPage />)}
               </RoleRoute>
             ),
           },
@@ -76,7 +122,7 @@ export const appRouter = createBrowserRouter([
             path: 'permissions',
             element: (
               <RoleRoute allowedRoles={['super_admin']}>
-                <PermissionsPage />
+                {withSuspense(<PermissionsPage />)}
               </RoleRoute>
             ),
           },
@@ -84,7 +130,15 @@ export const appRouter = createBrowserRouter([
             path: 'audit',
             element: (
               <RoleRoute allowedRoles={[...nonViewerRoles]}>
-                <AuditPage />
+                {withSuspense(<AuditPage />)}
+              </RoleRoute>
+            ),
+          },
+          {
+            path: 'monitoring',
+            element: (
+              <RoleRoute allowedRoles={['super_admin']}>
+                {withSuspense(<SystemMonitoringPage />)}
               </RoleRoute>
             ),
           },
@@ -92,7 +146,7 @@ export const appRouter = createBrowserRouter([
             path: 'rls',
             element: (
               <RoleRoute allowedRoles={[...nonViewerRoles]}>
-                <RLSRulesPage />
+                {withSuspense(<RLSRulesPage />)}
               </RoleRoute>
             ),
           },
@@ -100,7 +154,7 @@ export const appRouter = createBrowserRouter([
             path: 'workspaces',
             element: (
               <RoleRoute allowedRoles={[...nonViewerRoles]}>
-                <WorkspacesPage />
+                {withSuspense(<WorkspacesPage />)}
               </RoleRoute>
             ),
           },
@@ -108,7 +162,15 @@ export const appRouter = createBrowserRouter([
             path: 'powerbi',
             element: (
               <RoleRoute allowedRoles={[...nonViewerRoles]}>
-                <PowerBIPage />
+                {withSuspense(<PowerBIPage />)}
+              </RoleRoute>
+            ),
+          },
+          {
+            path: 'tickets',
+            element: (
+              <RoleRoute allowedRoles={[...nonViewerRoles]}>
+                {withSuspense(<TicketsPage />)}
               </RoleRoute>
             ),
           },
@@ -116,17 +178,17 @@ export const appRouter = createBrowserRouter([
             path: 'settings/branding',
             element: (
               <RoleRoute allowedRoles={[...nonViewerRoles]}>
-                <BrandingPage />
+                {withSuspense(<BrandingPage />)}
               </RoleRoute>
             ),
           },
           {
             path: 'settings/platform',
-            element: <PlatformSettingsPage />,
+            element: withSuspense(<PlatformSettingsPage />),
           },
           {
             path: 'reports/:dashboardId',
-            element: <DashboardViewPage />,
+            element: withSuspense(<DashboardViewPage />),
           },
         ],
       },
@@ -134,6 +196,6 @@ export const appRouter = createBrowserRouter([
   },
   {
     path: '*',
-    element: <NotFoundPage />,
+    element: withSuspense(<NotFoundPage />),
   },
 ])

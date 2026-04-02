@@ -1,4 +1,5 @@
-import { createContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useEffect, useMemo, useState } from 'react'
+import { toast } from 'sonner'
 
 import { authService } from '@/services/auth-service'
 import { sessionStorageService, VIEW_AS_CLEARED_EVENT } from '@/services/session-storage'
@@ -18,12 +19,14 @@ type AuthContextValue = {
   isLoading: boolean
   isViewAsMode: boolean
   login: (input: LoginInput) => Promise<void>
-  logout: () => void
+  logout: () => Promise<void>
   startViewAs: (user: ViewAsSession) => void
   stopViewAs: () => void
 }
 
 export const AuthContext = createContext<AuthContextValue | undefined>(undefined)
+
+const IDLE_TIMEOUT_MS = Number(import.meta.env.VITE_SESSION_IDLE_TIMEOUT_MS ?? 15 * 60 * 1000)
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [actorUser, setActorUser] = useState<SessionUser | null>(null)
@@ -35,6 +38,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     const bootstrapAuth = async () => {
       try {
+        sessionStorageService.clearLegacyPersistentSession()
         const session = await authService.hydrateSession()
         if (mounted) {
           setActorUser(session)
@@ -57,6 +61,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }, [])
 
+  const login = useCallback(async (input: LoginInput) => {
+    const session = await authService.login(input)
+    sessionStorageService.clearViewAsSession()
+    setActorUser(session)
+    setViewAsUser(null)
+  }, [])
+
+  const logout = useCallback(async () => {
+    await authService.logout()
+    setActorUser(null)
+    setViewAsUser(null)
+  }, [])
+
   useEffect(() => {
     const handleViewAsCleared = () => {
       setViewAsUser(null)
@@ -68,18 +85,49 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }, [])
 
-  const login = async (input: LoginInput) => {
-    const session = await authService.login(input)
-    sessionStorageService.clearViewAsSession()
-    setActorUser(session)
-    setViewAsUser(null)
-  }
+  useEffect(() => {
+    if (!actorUser) return
 
-  const logout = () => {
-    authService.logout()
-    setActorUser(null)
-    setViewAsUser(null)
-  }
+    let timeoutId: number | null = null
+
+    const clearTimer = () => {
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId)
+        timeoutId = null
+      }
+    }
+
+    const expireSession = () => {
+      clearTimer()
+      void authService.logout().finally(() => {
+        setActorUser(null)
+        setViewAsUser(null)
+        toast.info('Sua sessao foi encerrada por inatividade.')
+      })
+    }
+
+    const refreshIdleTimer = () => {
+      clearTimer()
+      timeoutId = window.setTimeout(expireSession, IDLE_TIMEOUT_MS)
+    }
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshIdleTimer()
+      }
+    }
+
+    const events: Array<keyof WindowEventMap> = ['click', 'keydown', 'scroll', 'mousemove', 'touchstart', 'focus']
+    events.forEach((eventName) => window.addEventListener(eventName, refreshIdleTimer, { passive: true }))
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    refreshIdleTimer()
+
+    return () => {
+      clearTimer()
+      events.forEach((eventName) => window.removeEventListener(eventName, refreshIdleTimer))
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [actorUser])
 
   const startViewAs = (user: ViewAsSession) => {
     sessionStorageService.setViewAsSession(user)
@@ -107,7 +155,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       startViewAs,
       stopViewAs,
     }),
-    [actorUser, isLoading, isViewAsMode, user, viewAsUser],
+    [actorUser, isLoading, isViewAsMode, login, logout, user, viewAsUser],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

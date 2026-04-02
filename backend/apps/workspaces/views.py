@@ -1,3 +1,4 @@
+from django.db.models import Count
 from rest_framework import viewsets
 
 from apps.common.services import apply_tenant_scope, is_super_admin
@@ -16,7 +17,9 @@ class WorkspaceViewSet(viewsets.ModelViewSet):
     ordering = ['name']
 
     def get_queryset(self):
-        queryset = Workspace.objects.select_related('tenant')
+        queryset = Workspace.objects.select_related('tenant').annotate(
+            dashboards_count=Count('dashboards', distinct=True)
+        )
         return apply_tenant_scope(queryset, self.request.user)
 
     def perform_create(self, serializer):

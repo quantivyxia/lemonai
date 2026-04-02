@@ -1,9 +1,12 @@
+from django.db.models import Prefetch
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status
 
 from apps.common.services import apply_tenant_scope, is_super_admin, is_viewer
+from apps.permissions.models import DashboardAccess
+from apps.dashboards.models import Dashboard
 from apps.users.filters import UserFilter, UserGroupFilter
 from apps.users.models import User, UserGroup
 from apps.users.permissions import GroupPermission, UserManagementPermission
@@ -20,8 +23,16 @@ class UserViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = User.objects.select_related('tenant', 'role', 'primary_group').prefetch_related(
-            'member_groups',
-            'dashboard_access_rules',
+            Prefetch(
+                'member_groups',
+                queryset=UserGroup.objects.prefetch_related(
+                    Prefetch('dashboards', queryset=Dashboard.objects.only('id').order_by('name'))
+                ).order_by('name'),
+            ),
+            Prefetch(
+                'dashboard_access_rules',
+                queryset=DashboardAccess.objects.only('id', 'user_id', 'dashboard_id', 'is_active').order_by(),
+            ),
         )
         queryset = apply_tenant_scope(queryset, self.request.user)
 

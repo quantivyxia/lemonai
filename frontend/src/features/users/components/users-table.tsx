@@ -26,6 +26,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { usePlatformStore } from '@/hooks/use-platform-store'
 import { useTenantScope } from '@/hooks/use-tenant-scope'
 import { formatDate } from '@/lib/utils'
+import { platformApi } from '@/services/platform-api'
 import type { User } from '@/types/entities'
 
 const roleLabelMap: Record<User['role'], string> = {
@@ -76,7 +77,7 @@ export const UsersTable = () => {
     status: 'active',
   })
 
-  const buildSuggestedPassword = (_tenantId: string) => {
+  const buildSuggestedPassword = () => {
     const randomDigits = Math.floor(100000 + Math.random() * 900000)
     return `${randomDigits}`
   }
@@ -163,7 +164,7 @@ export const UsersTable = () => {
       role: 'viewer',
       groupIds: [],
       dashboardIds: [],
-      password: buildSuggestedPassword(nextTenantId),
+      password: buildSuggestedPassword(),
       status: 'active',
     })
     setIsDialogOpen(true)
@@ -212,6 +213,8 @@ export const UsersTable = () => {
         .filter((group) => form.groupIds.includes(group.id))
         .map((group) => group.name)
 
+      const password = form.password.trim()
+
       await upsertUser({
         id: form.id,
         tenantId: form.tenantId,
@@ -223,9 +226,12 @@ export const UsersTable = () => {
         groups: selectedGroups,
         groupIds: form.groupIds,
         dashboardIds: form.dashboardIds,
-        ...((isCreate || form.password.trim()) ? { password: form.password.trim() } : {}),
+        ...(isCreate ? { password } : {}),
         status: form.status,
       })
+      if (!isCreate && form.id && password) {
+        await platformApi.setUserPassword(form.id, password)
+      }
       toast.success(form.id ? 'Usuario atualizado.' : 'Usuario criado com sucesso.')
       setIsDialogOpen(false)
     } catch (error) {
@@ -234,7 +240,7 @@ export const UsersTable = () => {
   }
 
   const refreshPasswordSuggestion = () => {
-    setForm((current) => ({ ...current, password: buildSuggestedPassword(current.tenantId) }))
+    setForm((current) => ({ ...current, password: buildSuggestedPassword() }))
   }
 
   const copyPasswordToClipboard = async () => {
@@ -326,7 +332,7 @@ export const UsersTable = () => {
             <Checkbox
               checked={checkedState}
               onCheckedChange={(checked) => {
-                const shouldCheck = Boolean(checked)
+                const shouldCheck = !!checked
                 setSelectedUserIds((current) =>
                   shouldCheck
                     ? [...new Set([...current, ...pageUserIds])]
@@ -342,7 +348,7 @@ export const UsersTable = () => {
             checked={selectedUserIds.includes(row.original.id)}
             onCheckedChange={(checked) =>
               setSelectedUserIds((current) =>
-                Boolean(checked)
+                checked === true
                   ? [...new Set([...current, row.original.id])]
                   : current.filter((id) => id !== row.original.id),
               )
@@ -588,7 +594,7 @@ export const UsersTable = () => {
                       tenantId: value,
                       groupIds: [],
                       dashboardIds: [],
-                      password: current.id ? current.password : buildSuggestedPassword(value),
+                      password: current.id ? current.password : buildSuggestedPassword(),
                     }))
                   }
                 >

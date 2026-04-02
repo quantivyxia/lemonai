@@ -6,6 +6,10 @@ export type AccessStatus = 'success' | 'denied' | 'error'
 export type AccessOrigin = 'portal' | 'api' | 'mobile'
 export type WorkspaceStatus = 'active' | 'inactive' | 'syncing'
 export type RLSRuleType = 'allow' | 'deny'
+export type SystemEventLevel = 'info' | 'warn' | 'error'
+export type SystemEventCategory = 'auth' | 'authorization' | 'admin' | 'integration' | 'system'
+export type TicketStatus = 'open' | 'analysis' | 'in_progress' | 'resolved' | 'closed'
+export type TicketPriority = 'low' | 'medium' | 'high' | 'urgent'
 
 export type Tenant = {
   id: string
@@ -15,10 +19,15 @@ export type Tenant = {
   dashboardsCount: number
   maxUsers: number
   maxDashboards: number
+  supportHoursTotal: number
+  supportHoursConsumed: number
+  supportHoursRemaining: number
   usersLimitReached: boolean
   dashboardsLimitReached: boolean
+  supportLimitReached: boolean
   usersUsagePercent: number
   dashboardsUsagePercent: number
+  supportUsagePercent: number
   brandingConfigured: boolean
   createdAt: string
 }
@@ -101,14 +110,173 @@ export type RoleAssignment = {
 
 export type AccessLog = {
   id: string
+  userId?: string
   tenantId: string
   userName: string
   tenantName: string
+  dashboardId?: string
   dashboardName: string
   ipAddress: string
   accessedAt: string
   status: AccessStatus
   origin: AccessOrigin
+  details?: string
+}
+
+export type TicketAttachment = {
+  id: string
+  fileName: string
+  contentType: string
+  sizeBytes: number
+  uploadedBy: string
+  uploadedByName: string
+  createdAt: string
+  downloadUrl: string
+}
+
+export type TicketComment = {
+  id: string
+  author: string
+  authorName: string
+  body: string
+  isInternal: boolean
+  createdAt: string
+}
+
+export type Ticket = {
+  id: string
+  code: string
+  tenantId: string
+  tenantName: string
+  requesterId: string
+  requesterName: string
+  requesterEmail: string
+  title: string
+  description: string
+  status: TicketStatus
+  statusLabel: string
+  priority: TicketPriority
+  priorityLabel: string
+  dueDate?: string | null
+  openedAt: string
+  lastActivityAt: string
+  createdAt: string
+  updatedAt: string
+  commentsCount: number
+  attachmentsCount: number
+  comments: TicketComment[]
+  attachments: TicketAttachment[]
+}
+
+export type TicketNotification = {
+  id: string
+  ticketId: string
+  ticketCode: string
+  ticketTitle: string
+  ticketStatus: TicketStatus
+  notificationType: 'comment' | 'status' | 'update' | 'due_date' | 'attachment'
+  title: string
+  message: string
+  actorName?: string
+  isRead: boolean
+  createdAt: string
+  readAt?: string | null
+}
+
+export type AuditActivity = {
+  id: string
+  kind: 'access' | 'event'
+  timestamp: string
+  title: string
+  description: string
+  userId?: string
+  userName: string
+  tenantId?: string
+  tenantName: string
+  dashboardId?: string
+  dashboardName?: string
+  status?: AccessStatus | ''
+  origin?: AccessOrigin | ''
+  category: SystemEventCategory | 'access'
+  level: SystemEventLevel
+  resourceType?: string
+  resourceId?: string
+  endpoint?: string
+  method?: string
+  statusCode?: number | null
+}
+
+export type AuditTopUser = {
+  userId?: string
+  userName: string
+  activityCount: number
+  accessCount: number
+  lastActivityAt: string
+  estimatedMinutes: number
+}
+
+export type AuditSummary = {
+  totalActivities: number
+  accessesThisMonth: number
+  activeUsers: number
+  uniqueDashboards: number
+  estimatedActiveMinutes: number
+  errorEvents: number
+  deniedEvents: number
+  adminChanges: number
+}
+
+export type SystemEventLog = {
+  id: string
+  userName: string
+  tenantName: string
+  level: SystemEventLevel
+  category: SystemEventCategory
+  action: string
+  message: string
+  resourceType?: string
+  resourceId?: string
+  endpoint: string
+  method: string
+  requestId: string
+  ipAddress?: string
+  statusCode?: number
+  metadata?: Record<string, unknown>
+  createdAt: string
+}
+
+export type SystemSummary = {
+  status: 'ok'
+  requestId: string
+  timestamp: string
+  counts: {
+    tenants: number
+    users: number
+    dashboards: number
+    workspaces: number
+    powerbiConnections: number
+    powerbiGateways: number
+    accessLogs: number
+    systemEvents: number
+  }
+  powerbi: {
+    activeConnections: number
+    connectionsWithError: number
+    gatewaysWithError: number
+  }
+  recent: {
+    latestSystemEvent?: {
+      created_at: string
+      level: SystemEventLevel
+      category: SystemEventCategory
+      action: string
+    } | null
+    latestAccessLog?: {
+      accessed_at: string
+      status: AccessStatus
+      origin: AccessOrigin
+    } | null
+  }
 }
 
 export type TenantBranding = {
