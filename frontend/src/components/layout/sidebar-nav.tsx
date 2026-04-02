@@ -108,8 +108,8 @@ export const SidebarNav = ({ mobile = false }: { mobile?: boolean }) => {
   )
   const portalName =
     user?.role === 'super_admin'
-      ? 'InsightHub'
-      : tenantPortalName || user?.tenantName || 'InsightHub'
+      ? 'LemonAI'
+      : tenantPortalName || user?.tenantName || 'LemonAI'
 
   return (
     <aside

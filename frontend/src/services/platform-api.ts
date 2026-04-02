@@ -691,7 +691,7 @@ const mapUser = (user: BackendUser): User => ({
   lastName: user.last_name,
   email: user.email,
   tenantId: user.tenant ?? 'global',
-  tenantName: user.tenant_name ?? 'InsightHub',
+  tenantName: user.tenant_name ?? 'LemonAI',
   role: user.role_code,
   group: user.group_name ?? '',
   groups: user.group_names ?? (user.group_name ? [user.group_name] : []),

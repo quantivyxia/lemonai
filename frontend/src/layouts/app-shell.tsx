@@ -21,8 +21,8 @@ export const AppShell = () => {
   )
   const portalName =
     user?.role === 'super_admin'
-      ? 'InsightHub'
-      : tenantPortalName || user?.tenantName || 'InsightHub'
+      ? 'LemonAI'
+      : tenantPortalName || user?.tenantName || 'LemonAI'
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#ebf3ff_0%,#f3f6fb_33%,#f5f7fb_65%,#f3f6fb_100%)]">

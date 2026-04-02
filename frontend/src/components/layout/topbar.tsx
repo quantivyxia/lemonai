@@ -45,7 +45,7 @@ export const Topbar = ({ onMobileMenuOpen }: { onMobileMenuOpen: () => void }) =
   const [unreadCount, setUnreadCount] = useState(0)
   const currentTitle = pathname.startsWith('/reports/')
     ? 'Visualizacao de Dashboard'
-    : (mapPathToTitle[pathname] ?? 'InsightHub')
+    : (mapPathToTitle[pathname] ?? 'LemonAI')
   const showTicketNotifications = user?.role === 'analyst'
 
   const loadNotifications = useCallback(async () => {
