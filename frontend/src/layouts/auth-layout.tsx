@@ -4,7 +4,7 @@ export const AuthLayout = () => {
   return (
     <div className="flex min-h-screen">
       {/* Left branding panel */}
-      <div className="relative hidden lg:flex lg:w-[58%] flex-col overflow-hidden bg-gradient-to-br from-slate-900 via-[#0a2347] to-slate-900">
+      <div className="relative hidden lg:flex lg:w-[58%] flex-col overflow-hidden bg-gradient-to-br from-[#0d2a5e] via-[#1a3f7a] to-[#0d2a5e]">
         {/* Dot grid pattern */}
         <div
           className="absolute inset-0 opacity-[0.06]"
@@ -27,11 +27,6 @@ export const AuthLayout = () => {
 
           {/* Main content */}
           <div className="flex flex-1 flex-col justify-center">
-            <div className="mb-6 inline-flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/[0.07] px-4 py-1.5 text-xs text-blue-200">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              Plataforma de BI empresarial
-            </div>
-
             <h1 className="font-display mb-5 text-5xl font-bold leading-[1.12] text-white">
               Dados que geram
               <br />
@@ -59,22 +54,6 @@ export const AuthLayout = () => {
               ))}
             </div>
 
-            {/* Decorative metric cards */}
-            <div className="mt-12 flex gap-4">
-              {[
-                { value: '99.9%', label: 'Uptime' },
-                { value: 'SOC 2', label: 'Compliance' },
-                { value: '<200ms', label: 'Latência' },
-              ].map((stat) => (
-                <div
-                  key={stat.label}
-                  className="flex-1 rounded-2xl border border-white/10 bg-white/[0.06] p-4 backdrop-blur-sm"
-                >
-                  <p className="font-display text-xl font-bold text-white">{stat.value}</p>
-                  <p className="mt-0.5 text-xs text-blue-300">{stat.label}</p>
-                </div>
-              ))}
-            </div>
           </div>
 
           <p className="text-xs text-blue-500">
