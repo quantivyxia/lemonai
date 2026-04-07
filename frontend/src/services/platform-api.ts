@@ -1,4 +1,4 @@
-import { apiList, apiRequest } from '@/services/api-client'
+import { API_LONG_TIMEOUT_MS, apiList, apiRequest } from '@/services/api-client'
 import { appLogger } from '@/services/app-logger'
 import type {
   AccessLog,
@@ -1149,6 +1149,7 @@ export const platformApi = {
     return apiRequest<{ detail: string; synced: number }>(
       `/powerbi/connections/${connectionId}/sync-workspaces/`,
       { method: 'POST' },
+      { timeoutMs: API_LONG_TIMEOUT_MS },
     )
   },
 
@@ -1159,6 +1160,7 @@ export const platformApi = {
         method: 'POST',
         body: JSON.stringify(payload),
       },
+      { timeoutMs: API_LONG_TIMEOUT_MS },
     )
   },
 
@@ -1181,16 +1183,21 @@ export const platformApi = {
     if (payload.datasetDisplayName) formData.append('dataset_display_name', payload.datasetDisplayName)
     if (payload.nameConflict) formData.append('name_conflict', payload.nameConflict)
 
-    return apiRequest<BackendPowerBIUploadResult>(`/powerbi/connections/${connectionId}/upload-pbix/`, {
-      method: 'POST',
-      body: formData,
-    })
+    return apiRequest<BackendPowerBIUploadResult>(
+      `/powerbi/connections/${connectionId}/upload-pbix/`,
+      {
+        method: 'POST',
+        body: formData,
+      },
+      { timeoutMs: API_LONG_TIMEOUT_MS },
+    )
   },
 
   syncPowerBIGateways(connectionId: string) {
     return apiRequest<{ detail: string; gatewaysSynced: number; datasourcesSynced: number }>(
       `/powerbi/connections/${connectionId}/sync-gateways/`,
       { method: 'POST' },
+      { timeoutMs: API_LONG_TIMEOUT_MS },
     )
   },
 

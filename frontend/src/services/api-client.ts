@@ -4,6 +4,7 @@ import { sessionStorageService } from '@/services/session-storage'
 const baseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, '')
 const API_BASE_URL = baseUrl ?? 'http://127.0.0.1:8000/api'
 const API_TIMEOUT_MS = Number(import.meta.env.VITE_API_TIMEOUT_MS ?? 20000)
+const API_LONG_TIMEOUT_MS = Number(import.meta.env.VITE_API_LONG_TIMEOUT_MS ?? 300000)
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 const RETRYABLE_STATUS_CODES = new Set([500, 502, 503, 504])
 const SAFE_REQUEST_RETRY_DELAYS_MS = [350, 900]
@@ -11,6 +12,7 @@ const SAFE_REQUEST_RETRY_DELAYS_MS = [350, 900]
 type RequestOptions = {
   auth?: boolean
   retryOnAuthError?: boolean
+  timeoutMs?: number
 }
 
 type DownloadResult = {
@@ -26,7 +28,6 @@ const buildUrl = (path: string) => {
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms))
 
 const NETWORK_ERROR_MESSAGE = `Nao foi possivel conectar com a API (${API_BASE_URL}). Verifique se o backend esta em execucao.`
-const TIMEOUT_ERROR_MESSAGE = `Tempo limite excedido ao chamar a API (${API_TIMEOUT_MS} ms).`
 const VIEW_AS_HEADER = 'X-InsightHub-View-As-User'
 const VIEW_AS_READ_ONLY_MESSAGE = 'Modo "Ver tela do usuario" permite apenas visualizacao. Alteracoes estao bloqueadas.'
 const INVALID_VIEW_AS_MESSAGES = [
@@ -91,14 +92,17 @@ const isInvalidViewAsPayload = (payload: unknown) => {
   return typeof detail === 'string' && INVALID_VIEW_AS_MESSAGES.includes(detail)
 }
 
-const fetchWithTimeout = async (url: string, init: RequestInit) => {
+const formatTimeoutErrorMessage = (timeoutMs: number) =>
+  `Tempo limite excedido ao chamar a API (${timeoutMs} ms).`
+
+const fetchWithTimeout = async (url: string, init: RequestInit, timeoutMs: number) => {
   const controller = new AbortController()
-  const timeoutId = window.setTimeout(() => controller.abort(), API_TIMEOUT_MS)
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs)
   try {
     return await fetch(url, { ...init, signal: controller.signal })
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new Error(TIMEOUT_ERROR_MESSAGE)
+      throw new Error(formatTimeoutErrorMessage(timeoutMs))
     }
     throw error
   } finally {
@@ -106,7 +110,7 @@ const fetchWithTimeout = async (url: string, init: RequestInit) => {
   }
 }
 
-const fetchWithResilience = async (url: string, init: RequestInit, method: string) => {
+const fetchWithResilience = async (url: string, init: RequestInit, method: string, timeoutMs: number) => {
   const isSafeMethod = SAFE_METHODS.has(method)
   let lastError: unknown = null
 
@@ -116,7 +120,7 @@ const fetchWithResilience = async (url: string, init: RequestInit, method: strin
     }
 
     try {
-      const response = await fetchWithTimeout(url, init)
+      const response = await fetchWithTimeout(url, init, timeoutMs)
       if (!isSafeMethod || !RETRYABLE_STATUS_CODES.has(response.status) || attempt === SAFE_REQUEST_RETRY_DELAYS_MS.length) {
         return response
       }
@@ -146,7 +150,7 @@ const refreshAccessToken = async () => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ refresh }),
-    })
+    }, API_TIMEOUT_MS)
   } catch (error) {
     sessionStorageService.clear()
     appLogger.warn('Falha ao renovar access token', {
@@ -196,6 +200,7 @@ export const apiRequest = async <T>(
 ): Promise<T> => {
   const auth = options.auth ?? true
   const retryOnAuthError = options.retryOnAuthError ?? true
+  const timeoutMs = options.timeoutMs ?? API_TIMEOUT_MS
   const method = (init.method ?? 'GET').toUpperCase()
   const isSafeMethod = SAFE_METHODS.has(method)
   const url = buildUrl(path)
@@ -210,11 +215,11 @@ export const apiRequest = async <T>(
 
   let response: Response
   try {
-    response = await fetchWithResilience(url, { ...init, headers }, method)
+    response = await fetchWithResilience(url, { ...init, headers }, method, timeoutMs)
   } catch (error) {
     const message = error instanceof Error ? error.message : NETWORK_ERROR_MESSAGE
     appLogger.error('Falha de comunicacao com API', { path, method, error: message })
-    throw new Error(message === TIMEOUT_ERROR_MESSAGE ? message : NETWORK_ERROR_MESSAGE)
+    throw new Error(message === formatTimeoutErrorMessage(timeoutMs) ? message : NETWORK_ERROR_MESSAGE)
   }
 
   if (response.status === 401 && auth && retryOnAuthError) {
@@ -223,10 +228,10 @@ export const apiRequest = async <T>(
       headers.set('Authorization', `Bearer ${refreshedToken}`)
       let retryResponse: Response
       try {
-        retryResponse = await fetchWithResilience(url, { ...init, headers }, method)
+        retryResponse = await fetchWithResilience(url, { ...init, headers }, method, timeoutMs)
       } catch (error) {
         const message = error instanceof Error ? error.message : NETWORK_ERROR_MESSAGE
-        throw new Error(message === TIMEOUT_ERROR_MESSAGE ? message : NETWORK_ERROR_MESSAGE)
+        throw new Error(message === formatTimeoutErrorMessage(timeoutMs) ? message : NETWORK_ERROR_MESSAGE)
       }
       const retryPayload = await parseBody(retryResponse)
       if (!retryResponse.ok) {
@@ -251,10 +256,10 @@ export const apiRequest = async <T>(
 
     let retryResponse: Response
     try {
-      retryResponse = await fetchWithResilience(url, { ...init, headers }, method)
+      retryResponse = await fetchWithResilience(url, { ...init, headers }, method, timeoutMs)
     } catch (error) {
       const message = error instanceof Error ? error.message : NETWORK_ERROR_MESSAGE
-      throw new Error(message === TIMEOUT_ERROR_MESSAGE ? message : NETWORK_ERROR_MESSAGE)
+      throw new Error(message === formatTimeoutErrorMessage(timeoutMs) ? message : NETWORK_ERROR_MESSAGE)
     }
 
     const retryPayload = await parseBody(retryResponse)
@@ -279,6 +284,8 @@ export const apiRequest = async <T>(
   return payload as T
 }
 
+export { API_LONG_TIMEOUT_MS }
+
 const resolveDownloadFileName = (contentDisposition: string | null, fallback: string) => {
   if (!contentDisposition) return fallback
 
@@ -298,6 +305,7 @@ export const apiDownload = async (
 ): Promise<DownloadResult> => {
   const auth = options.auth ?? true
   const retryOnAuthError = options.retryOnAuthError ?? true
+  const timeoutMs = options.timeoutMs ?? API_TIMEOUT_MS
   const method = (init.method ?? 'GET').toUpperCase()
   const url = buildUrl(path)
 
@@ -307,17 +315,17 @@ export const apiDownload = async (
 
   let response: Response
   try {
-    response = await fetchWithResilience(url, { ...init, headers }, method)
+    response = await fetchWithResilience(url, { ...init, headers }, method, timeoutMs)
   } catch (error) {
     const message = error instanceof Error ? error.message : NETWORK_ERROR_MESSAGE
-    throw new Error(message === TIMEOUT_ERROR_MESSAGE ? message : NETWORK_ERROR_MESSAGE)
+    throw new Error(message === formatTimeoutErrorMessage(timeoutMs) ? message : NETWORK_ERROR_MESSAGE)
   }
 
   if (response.status === 401 && auth && retryOnAuthError) {
     const refreshedToken = await refreshAccessToken()
     if (refreshedToken) {
       headers.set('Authorization', `Bearer ${refreshedToken}`)
-      response = await fetchWithResilience(url, { ...init, headers }, method)
+      response = await fetchWithResilience(url, { ...init, headers }, method, timeoutMs)
     }
   }
 
