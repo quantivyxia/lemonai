@@ -28,8 +28,8 @@ export const MicrosoftCallbackPage = () => {
     }
 
     sessionStorageService.setTokens({ access, refresh }, false)
-    toast.success('Acesso autorizado com sucesso.')
-    navigate('/', { replace: true })
+    // Force a full app bootstrap so AuthProvider rehydrates the new session immediately.
+    window.location.replace('/')
   }, [navigate, searchParams])
 
   return (

@@ -56,7 +56,8 @@ export const JoinTenantPage = () => {
 
       sessionStorageService.setTokens({ access: data.access, refresh: data.refresh }, false)
       toast.success('Cadastro realizado! Bem-vindo ao LemonAI.')
-      navigate('/', { replace: true })
+      // Force a full app bootstrap so the authenticated shell loads on the first try.
+      window.location.replace('/')
     } catch {
       toast.error('Nao foi possivel conectar ao servidor.')
     } finally {
