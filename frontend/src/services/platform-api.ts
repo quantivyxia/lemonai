@@ -394,6 +394,7 @@ const buildBootstrapPayload = (bootstrap: BackendBootstrapPayload): BootstrapPay
               ),
             )
           : 0),
+      joinCode: tenant.join_code ?? '',
       brandingConfigured: false,
       createdAt: tenant.created_at,
     }

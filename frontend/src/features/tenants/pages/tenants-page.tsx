@@ -79,7 +79,7 @@ export const TenantsPage = () => {
     setForm({
       name: '',
       joinCode: '',
-      status: 'active',
+      status: 'active' as Tenant['status'],
       maxUsers: 25,
       maxDashboards: 20,
       supportHoursTotal: 0,
