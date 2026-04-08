@@ -46,6 +46,9 @@ export type User = {
   groups: string[]
   groupIds: string[]
   dashboardIds: string[]
+  inheritedDashboardIds: string[]
+  directDashboardIds: string[]
+  blockedDashboardIds: string[]
   status: 'active' | 'inactive'
   lastAccessAt: string
   avatarUrl?: string
@@ -91,6 +94,7 @@ export type UserGroup = {
   description: string
   users: string[]
   dashboards: string[]
+  dashboardIds?: string[]
 }
 
 export type PermissionFeature = {

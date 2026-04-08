@@ -4,7 +4,7 @@ from apps.common.services import enforce_same_tenant, is_super_admin
 from apps.dashboards.models import Dashboard
 from apps.permissions.models import RoleCode
 from apps.users.models import User, UserGroup, UserStatus
-from apps.users.services import sync_group_dashboard_access, sync_user_direct_dashboard_access
+from apps.users.services import sync_group_dashboard_access, sync_user_dashboard_overrides
 
 
 class UserGroupSerializer(serializers.ModelSerializer):
@@ -72,7 +72,20 @@ class UserSerializer(serializers.ModelSerializer):
     group_ids = serializers.SerializerMethodField()
     group_names = serializers.SerializerMethodField()
     dashboard_ids = serializers.SerializerMethodField()
+    inherited_dashboard_ids = serializers.SerializerMethodField()
+    direct_dashboard_ids = serializers.SerializerMethodField()
+    blocked_dashboard_ids = serializers.SerializerMethodField()
     selected_group_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        write_only=True,
+        required=False,
+    )
+    selected_direct_dashboard_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        write_only=True,
+        required=False,
+    )
+    selected_blocked_dashboard_ids = serializers.ListField(
         child=serializers.UUIDField(),
         write_only=True,
         required=False,
@@ -101,7 +114,12 @@ class UserSerializer(serializers.ModelSerializer):
             'group_ids',
             'group_names',
             'dashboard_ids',
+            'inherited_dashboard_ids',
+            'direct_dashboard_ids',
+            'blocked_dashboard_ids',
             'selected_group_ids',
+            'selected_direct_dashboard_ids',
+            'selected_blocked_dashboard_ids',
             'selected_dashboard_ids',
             'status',
             'avatar_url',
@@ -114,14 +132,26 @@ class UserSerializer(serializers.ModelSerializer):
     def _get_member_groups(self, obj):
         return list(obj.member_groups.all())
 
-    def _get_active_direct_dashboard_ids(self, obj):
-        return [rule.dashboard_id for rule in obj.dashboard_access_rules.all() if rule.is_active]
+    def _get_user_direct_dashboard_ids(self, obj):
+        return [str(rule.dashboard_id) for rule in obj.dashboard_access_rules.all() if rule.is_active]
+
+    def _get_user_blocked_dashboard_ids(self, obj):
+        return [str(rule.dashboard_id) for rule in obj.dashboard_access_rules.all() if not rule.is_active]
 
     def _get_group_dashboard_ids(self, obj):
         dashboard_ids = []
         for group in self._get_member_groups(obj):
-            dashboard_ids.extend(dashboard.id for dashboard in group.dashboards.all())
+            dashboard_ids.extend(str(dashboard.id) for dashboard in group.dashboards.all())
         return dashboard_ids
+
+    def _get_effective_dashboard_ids(self, obj):
+        blocked_ids = set(self._get_user_blocked_dashboard_ids(obj))
+        effective_ids = [
+            dashboard_id
+            for dashboard_id in [*self._get_group_dashboard_ids(obj), *self._get_user_direct_dashboard_ids(obj)]
+            if dashboard_id not in blocked_ids
+        ]
+        return list(dict.fromkeys(effective_ids))
 
     def get_group_ids(self, obj):
         return [group.id for group in self._get_member_groups(obj)]
@@ -130,7 +160,16 @@ class UserSerializer(serializers.ModelSerializer):
         return [group.name for group in self._get_member_groups(obj)]
 
     def get_dashboard_ids(self, obj):
-        return list(dict.fromkeys([*self._get_active_direct_dashboard_ids(obj), *self._get_group_dashboard_ids(obj)]))
+        return self._get_effective_dashboard_ids(obj)
+
+    def get_inherited_dashboard_ids(self, obj):
+        return list(dict.fromkeys(self._get_group_dashboard_ids(obj)))
+
+    def get_direct_dashboard_ids(self, obj):
+        return list(dict.fromkeys(self._get_user_direct_dashboard_ids(obj)))
+
+    def get_blocked_dashboard_ids(self, obj):
+        return list(dict.fromkeys(self._get_user_blocked_dashboard_ids(obj)))
 
     def validate(self, attrs):
         request = self.context.get('request')
@@ -141,7 +180,12 @@ class UserSerializer(serializers.ModelSerializer):
         target_tenant = attrs.get('tenant') or getattr(self.instance, 'tenant', None)
         target_role = attrs.get('role') or getattr(self.instance, 'role', None)
         selected_group_ids = attrs.get('selected_group_ids', None)
-        selected_dashboard_ids = attrs.get('selected_dashboard_ids', None)
+        selected_direct_dashboard_ids = attrs.get('selected_direct_dashboard_ids', None)
+        selected_blocked_dashboard_ids = attrs.get('selected_blocked_dashboard_ids', None)
+        legacy_selected_dashboard_ids = attrs.get('selected_dashboard_ids', None)
+
+        if selected_direct_dashboard_ids is None and legacy_selected_dashboard_ids is not None:
+            selected_direct_dashboard_ids = legacy_selected_dashboard_ids
 
         if target_tenant and not enforce_same_tenant(actor, target_tenant.id):
             raise serializers.ValidationError({'tenant': 'Operacao permitida apenas no tenant do usuario logado.'})
@@ -193,25 +237,61 @@ class UserSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({'selected_group_ids': 'Todos os grupos devem ser do mesmo tenant do usuario.'})
             attrs['_selected_groups'] = list(groups_qs)
 
-        if selected_dashboard_ids is not None:
+        def resolve_selected_dashboards(field_name, dashboard_ids):
+            if dashboard_ids is None:
+                return None
             if not target_tenant:
-                raise serializers.ValidationError({'selected_dashboard_ids': 'Defina um tenant para vincular dashboards.'})
-            dashboards_qs = Dashboard.objects.filter(id__in=selected_dashboard_ids)
-            if dashboards_qs.count() != len(set(selected_dashboard_ids)):
-                raise serializers.ValidationError({'selected_dashboard_ids': 'Um ou mais dashboards nao foram encontrados.'})
+                raise serializers.ValidationError({field_name: 'Defina um tenant para vincular dashboards.'})
+
+            normalized_ids = {str(dashboard_id) for dashboard_id in dashboard_ids}
+            dashboards_qs = Dashboard.objects.filter(id__in=normalized_ids)
+            if dashboards_qs.count() != len(normalized_ids):
+                raise serializers.ValidationError({field_name: 'Um ou mais dashboards nao foram encontrados.'})
             if dashboards_qs.exclude(tenant_id=target_tenant.id).exists():
-                raise serializers.ValidationError(
-                    {'selected_dashboard_ids': 'Todos os dashboards devem ser do mesmo tenant do usuario.'}
-                )
-            attrs['_selected_dashboards'] = list(dashboards_qs)
+                raise serializers.ValidationError({field_name: 'Todos os dashboards devem ser do mesmo tenant do usuario.'})
+            return list(dashboards_qs)
+
+        selected_direct_dashboards = resolve_selected_dashboards(
+            'selected_direct_dashboard_ids',
+            selected_direct_dashboard_ids,
+        )
+        selected_blocked_dashboards = resolve_selected_dashboards(
+            'selected_blocked_dashboard_ids',
+            selected_blocked_dashboard_ids,
+        )
+
+        if selected_direct_dashboards is not None:
+            attrs['_selected_direct_dashboards'] = selected_direct_dashboards
+
+        if selected_blocked_dashboards is not None:
+            attrs['_selected_blocked_dashboards'] = selected_blocked_dashboards
+
+        direct_dashboard_ids = {
+            str(dashboard.id) for dashboard in selected_direct_dashboards or []
+        }
+        blocked_dashboard_ids = {
+            str(dashboard.id) for dashboard in selected_blocked_dashboards or []
+        }
+        overlap_ids = direct_dashboard_ids & blocked_dashboard_ids
+        if overlap_ids:
+            raise serializers.ValidationError(
+                {
+                    'selected_blocked_dashboard_ids': (
+                        'Um dashboard nao pode ser concedido e bloqueado ao mesmo tempo para o mesmo usuario.'
+                    )
+                }
+            )
 
         return attrs
 
     def create(self, validated_data):
         password = validated_data.pop('password')
         selected_groups = validated_data.pop('_selected_groups', [])
-        selected_dashboards = validated_data.pop('_selected_dashboards', [])
+        selected_direct_dashboards = validated_data.pop('_selected_direct_dashboards', [])
+        selected_blocked_dashboards = validated_data.pop('_selected_blocked_dashboards', [])
         validated_data.pop('selected_group_ids', None)
+        validated_data.pop('selected_direct_dashboard_ids', None)
+        validated_data.pop('selected_blocked_dashboard_ids', None)
         validated_data.pop('selected_dashboard_ids', None)
 
         user = User(**validated_data)
@@ -223,14 +303,21 @@ class UserSerializer(serializers.ModelSerializer):
             user.primary_group = selected_groups[0]
             user.save(update_fields=['primary_group', 'updated_at'])
 
-        sync_user_direct_dashboard_access(user, [str(dashboard.id) for dashboard in selected_dashboards])
+        sync_user_dashboard_overrides(
+            user,
+            [str(dashboard.id) for dashboard in selected_direct_dashboards],
+            [str(dashboard.id) for dashboard in selected_blocked_dashboards],
+        )
         return user
 
     def update(self, instance, validated_data):
         password = validated_data.pop('password', None)
         selected_groups = validated_data.pop('_selected_groups', None)
-        selected_dashboards = validated_data.pop('_selected_dashboards', None)
+        selected_direct_dashboards = validated_data.pop('_selected_direct_dashboards', None)
+        selected_blocked_dashboards = validated_data.pop('_selected_blocked_dashboards', None)
         validated_data.pop('selected_group_ids', None)
+        validated_data.pop('selected_direct_dashboard_ids', None)
+        validated_data.pop('selected_blocked_dashboard_ids', None)
         validated_data.pop('selected_dashboard_ids', None)
 
         for attr, value in validated_data.items():
@@ -246,7 +333,19 @@ class UserSerializer(serializers.ModelSerializer):
         elif instance.primary_group and not instance.member_groups.filter(id=instance.primary_group_id).exists():
             instance.member_groups.add(instance.primary_group)
 
-        if selected_dashboards is not None:
-            sync_user_direct_dashboard_access(instance, [str(dashboard.id) for dashboard in selected_dashboards])
+        if selected_direct_dashboards is not None or selected_blocked_dashboards is not None:
+            sync_user_dashboard_overrides(
+                instance,
+                (
+                    self._get_user_direct_dashboard_ids(instance)
+                    if selected_direct_dashboards is None
+                    else [str(dashboard.id) for dashboard in selected_direct_dashboards]
+                ),
+                (
+                    self._get_user_blocked_dashboard_ids(instance)
+                    if selected_blocked_dashboards is None
+                    else [str(dashboard.id) for dashboard in selected_blocked_dashboards]
+                ),
+            )
 
         return instance

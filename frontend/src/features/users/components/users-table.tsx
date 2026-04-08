@@ -49,7 +49,8 @@ type UserForm = {
   tenantId: string
   role: User['role']
   groupIds: string[]
-  dashboardIds: string[]
+  directDashboardIds: string[]
+  blockedDashboardIds: string[]
   password: string
   status: User['status']
 }
@@ -72,7 +73,8 @@ export const UsersTable = () => {
     email: '',
     role: 'viewer',
     groupIds: [],
-    dashboardIds: [],
+    directDashboardIds: [],
+    blockedDashboardIds: [],
     password: '',
     status: 'active',
   })
@@ -118,6 +120,51 @@ export const UsersTable = () => {
     () => new Map(dashboards.map((dashboard) => [dashboard.id, dashboard.name])),
     [dashboards],
   )
+  const inheritedDashboardIds = useMemo(
+    () =>
+      [
+        ...new Set(
+          groupOptions
+            .filter((group) => form.groupIds.includes(group.id))
+            .flatMap((group) => group.dashboardIds ?? []),
+        ),
+      ],
+    [form.groupIds, groupOptions],
+  )
+  const inheritedDashboardIdSet = useMemo(() => new Set(inheritedDashboardIds), [inheritedDashboardIds])
+  const effectiveDashboardIds = useMemo(
+    () =>
+      [
+        ...new Set(
+          [...inheritedDashboardIds, ...form.directDashboardIds].filter(
+            (dashboardId) => !form.blockedDashboardIds.includes(dashboardId),
+          ),
+        ),
+      ],
+    [form.blockedDashboardIds, form.directDashboardIds, inheritedDashboardIds],
+  )
+  const extraDashboardOptions = useMemo(
+    () =>
+      dashboardOptions.filter(
+        (dashboard) => !inheritedDashboardIdSet.has(dashboard.id) || form.directDashboardIds.includes(dashboard.id),
+      ),
+    [dashboardOptions, form.directDashboardIds, inheritedDashboardIdSet],
+  )
+  const blockedDashboardOptions = useMemo(
+    () =>
+      dashboardOptions.filter(
+        (dashboard) => inheritedDashboardIdSet.has(dashboard.id) || form.blockedDashboardIds.includes(dashboard.id),
+      ),
+    [dashboardOptions, form.blockedDashboardIds, inheritedDashboardIdSet],
+  )
+  const inheritedDashboardNames = useMemo(
+    () => inheritedDashboardIds.map((dashboardId) => dashboardNameById.get(dashboardId) ?? dashboardId),
+    [dashboardNameById, inheritedDashboardIds],
+  )
+  const effectiveDashboardNames = useMemo(
+    () => effectiveDashboardIds.map((dashboardId) => dashboardNameById.get(dashboardId) ?? dashboardId),
+    [dashboardNameById, effectiveDashboardIds],
+  )
 
   useEffect(() => {
     setTenantFilter(isSuperAdmin ? 'all' : (userTenantName ?? 'all'))
@@ -129,11 +176,23 @@ export const UsersTable = () => {
     setForm((current) => ({
       ...current,
       groupIds: current.groupIds.filter((groupId) => groupOptions.some((group) => group.id === groupId)),
-      dashboardIds: current.dashboardIds.filter((dashboardId) =>
+      directDashboardIds: current.directDashboardIds.filter((dashboardId) =>
+        dashboardOptions.some((dashboard) => dashboard.id === dashboardId),
+      ),
+      blockedDashboardIds: current.blockedDashboardIds.filter((dashboardId) =>
         dashboardOptions.some((dashboard) => dashboard.id === dashboardId),
       ),
     }))
   }, [dashboardOptions, groupOptions, isDialogOpen])
+
+  useEffect(() => {
+    if (!isDialogOpen) return
+
+    setForm((current) => ({
+      ...current,
+      blockedDashboardIds: current.blockedDashboardIds.filter((dashboardId) => inheritedDashboardIdSet.has(dashboardId)),
+    }))
+  }, [inheritedDashboardIdSet, isDialogOpen])
 
   const filteredData = useMemo(() => {
     return scopedUsers.filter((user) => {
@@ -163,7 +222,8 @@ export const UsersTable = () => {
       email: '',
       role: 'viewer',
       groupIds: [],
-      dashboardIds: [],
+      directDashboardIds: [],
+      blockedDashboardIds: [],
       password: buildSuggestedPassword(),
       status: 'active',
     })
@@ -181,7 +241,8 @@ export const UsersTable = () => {
       email: user.email,
       role: user.role,
       groupIds: user.groupIds ?? [],
-      dashboardIds: user.dashboardIds ?? [],
+      directDashboardIds: user.directDashboardIds ?? [],
+      blockedDashboardIds: user.blockedDashboardIds ?? [],
       password: user.password ?? '',
       status: user.status,
     })
@@ -225,7 +286,10 @@ export const UsersTable = () => {
         group: selectedGroups[0] ?? '',
         groups: selectedGroups,
         groupIds: form.groupIds,
-        dashboardIds: form.dashboardIds,
+        dashboardIds: effectiveDashboardIds,
+        inheritedDashboardIds,
+        directDashboardIds: form.directDashboardIds,
+        blockedDashboardIds: form.blockedDashboardIds,
         ...(isCreate ? { password } : {}),
         status: form.status,
       })
@@ -395,11 +459,7 @@ export const UsersTable = () => {
         id: 'dashboards',
         header: 'Dashboards',
         cell: ({ row }) => {
-          const direct = row.original.dashboardIds ?? []
-          const fromGroups = groups
-            .filter((group) => (row.original.groupIds ?? []).includes(group.id))
-            .flatMap((group) => group.dashboards)
-          const names = [...new Set([...direct.map((id) => dashboardNameById.get(id) ?? id), ...fromGroups])]
+          const names = [...new Set((row.original.dashboardIds ?? []).map((id) => dashboardNameById.get(id) ?? id))]
           if (names.length === 0) return '-'
           return names.length <= 2 ? names.join(', ') : `${names[0]}, ${names[1]} +${names.length - 2}`
         },
@@ -577,7 +637,7 @@ export const UsersTable = () => {
       </Card>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>{form.id ? 'Editar usuario' : 'Novo usuario'}</DialogTitle>
             <DialogDescription>Gerencie perfil, grupo e tenant do usuario.</DialogDescription>
@@ -593,7 +653,8 @@ export const UsersTable = () => {
                       ...current,
                       tenantId: value,
                       groupIds: [],
-                      dashboardIds: [],
+                      directDashboardIds: [],
+                      blockedDashboardIds: [],
                       password: current.id ? current.password : buildSuggestedPassword(),
                     }))
                   }
@@ -697,7 +758,7 @@ export const UsersTable = () => {
                 </Select>
               </div>
             </div>
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-4">
               <div>
                 <label className="text-sm font-medium text-slate-700">Grupos (multiplos)</label>
                 <div className="mt-1">
@@ -711,20 +772,108 @@ export const UsersTable = () => {
                     disabled={groupOptions.length === 0}
                   />
                 </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Os grupos continuam sendo a base do acesso. Abaixo voce pode complementar ou retirar dashboards herdados.
+                </p>
               </div>
 
-              <div>
-                <label className="text-sm font-medium text-slate-700">Dashboards (acesso direto)</label>
-                <div className="mt-1">
-                  <MultiSelectDropdown
-                    values={form.dashboardIds}
-                    onChange={(values) => setForm((current) => ({ ...current, dashboardIds: values }))}
-                    options={dashboardOptions.map((dashboard) => ({ value: dashboard.id, label: dashboard.name }))}
-                    placeholder={dashboardOptions.length > 0 ? 'Selecione dashboards' : 'Nenhum dashboard disponivel'}
-                    searchPlaceholder="Pesquisar dashboard"
-                    emptyMessage="Nenhum dashboard encontrado."
-                    disabled={dashboardOptions.length === 0}
-                  />
+              <div className="rounded-2xl border border-border/70 bg-slate-50/80 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">Dashboards herdados dos grupos</p>
+                    <p className="text-xs text-muted-foreground">
+                      Estes dashboards chegam automaticamente pelos grupos selecionados.
+                    </p>
+                  </div>
+                  <Badge variant="neutral">{inheritedDashboardNames.length}</Badge>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {inheritedDashboardNames.length > 0 ? (
+                    inheritedDashboardNames.map((dashboardName) => (
+                      <Badge key={dashboardName} variant="neutral" className="rounded-full px-3 py-1">
+                        {dashboardName}
+                      </Badge>
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Nenhum dashboard herdado pelos grupos atuais.</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <label className="text-sm font-medium text-slate-700">Dashboards extras do usuario</label>
+                  <div className="mt-1">
+                    <MultiSelectDropdown
+                      values={form.directDashboardIds}
+                      onChange={(values) =>
+                        setForm((current) => ({
+                          ...current,
+                          directDashboardIds: values,
+                          blockedDashboardIds: current.blockedDashboardIds.filter((dashboardId) => !values.includes(dashboardId)),
+                        }))
+                      }
+                      options={extraDashboardOptions.map((dashboard) => ({ value: dashboard.id, label: dashboard.name }))}
+                      placeholder={dashboardOptions.length > 0 ? 'Adicionar dashboards extras' : 'Nenhum dashboard disponivel'}
+                      searchPlaceholder="Pesquisar dashboard"
+                      emptyMessage="Nenhum dashboard extra disponivel."
+                      disabled={dashboardOptions.length === 0}
+                    />
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Use este campo para liberar dashboards alem dos que o grupo ja entrega.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium text-slate-700">Dashboards removidos do usuario</label>
+                  <div className="mt-1">
+                    <MultiSelectDropdown
+                      values={form.blockedDashboardIds}
+                      onChange={(values) =>
+                        setForm((current) => ({
+                          ...current,
+                          blockedDashboardIds: values,
+                          directDashboardIds: current.directDashboardIds.filter((dashboardId) => !values.includes(dashboardId)),
+                        }))
+                      }
+                      options={blockedDashboardOptions.map((dashboard) => ({ value: dashboard.id, label: dashboard.name }))}
+                      placeholder={
+                        blockedDashboardOptions.length > 0
+                          ? 'Remover dashboards herdados'
+                          : 'Nenhum dashboard herdado para bloquear'
+                      }
+                      searchPlaceholder="Pesquisar dashboard herdado"
+                      emptyMessage="Nenhum dashboard herdado disponivel."
+                      disabled={blockedDashboardOptions.length === 0}
+                    />
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Use este campo para ocultar dashboards que vieram dos grupos, mas nao devem aparecer para este usuario.
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-sky-100 bg-sky-50/70 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">Acesso final do usuario</p>
+                    <p className="text-xs text-muted-foreground">
+                      Resultado da heranca do grupo com os ajustes manuais feitos neste formulario.
+                    </p>
+                  </div>
+                  <Badge variant="neutral">{effectiveDashboardNames.length}</Badge>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {effectiveDashboardNames.length > 0 ? (
+                    effectiveDashboardNames.map((dashboardName) => (
+                      <Badge key={dashboardName} variant="default" className="rounded-full border border-sky-200 bg-white px-3 py-1 text-sky-900">
+                        {dashboardName}
+                      </Badge>
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Esse usuario ficara sem dashboards visiveis com a configuracao atual.</p>
+                  )}
                 </div>
               </div>
             </div>

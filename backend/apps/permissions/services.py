@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from django.db.models import Q
-
 from apps.common.services import is_analyst, is_super_admin
 from apps.permissions.models import DashboardAccess, RLSRule
 
@@ -14,11 +12,26 @@ def get_user_accessible_dashboard_ids(user):
 
     user_role_id = getattr(user, 'role_id', None)
     group_ids = list(user.member_groups.values_list('id', flat=True))
-
-    queryset = DashboardAccess.objects.filter(is_active=True).filter(
-        Q(user=user) | Q(group_id__in=group_ids) | Q(role_id=user_role_id)
+    role_dashboard_ids = set(
+        DashboardAccess.objects.filter(role_id=user_role_id, is_active=True).values_list('dashboard_id', flat=True)
     )
-    return list(queryset.values_list('dashboard_id', flat=True).distinct())
+    group_dashboard_ids = set()
+    if group_ids:
+        group_dashboard_ids = set(
+            DashboardAccess.objects.filter(group_id__in=group_ids, is_active=True).values_list('dashboard_id', flat=True)
+        )
+
+    user_rules = list(
+        DashboardAccess.objects.filter(user=user).values_list('dashboard_id', 'is_active')
+    )
+    direct_dashboard_ids = {dashboard_id for dashboard_id, is_active in user_rules if is_active}
+    blocked_dashboard_ids = {dashboard_id for dashboard_id, is_active in user_rules if not is_active}
+
+    if is_analyst(user) and not group_ids and not user_rules and not role_dashboard_ids:
+        return None
+
+    effective_ids = (role_dashboard_ids | group_dashboard_ids | direct_dashboard_ids) - blocked_dashboard_ids
+    return list(effective_ids)
 
 
 def has_dashboard_access(user, dashboard) -> bool:
@@ -27,8 +40,6 @@ def has_dashboard_access(user, dashboard) -> bool:
 
     if not user.tenant_id or user.tenant_id != dashboard.tenant_id:
         return False
-    if is_analyst(user):
-        return True
 
     dashboard_ids = get_user_accessible_dashboard_ids(user)
     return dashboard_ids is None or dashboard.id in dashboard_ids

@@ -5,7 +5,7 @@ from rest_framework.response import Response
 
 from apps.audit.models import AccessStatus
 from apps.audit.services import log_dashboard_access
-from apps.common.services import apply_tenant_scope, get_actor_user, is_super_admin, is_view_as_mode, is_viewer
+from apps.common.services import apply_tenant_scope, get_actor_user, is_super_admin, is_view_as_mode
 from apps.dashboards.filters import DashboardColumnFilter, DashboardFilter
 from apps.dashboards.models import Dashboard, DashboardColumn, DashboardStatus
 from apps.dashboards.permissions import DashboardColumnPermission, DashboardPermission
@@ -27,8 +27,6 @@ class DashboardViewSet(viewsets.ModelViewSet):
         queryset = apply_tenant_scope(queryset, self.request.user)
 
         if is_super_admin(self.request.user):
-            return queryset
-        if not is_viewer(self.request.user):
             return queryset
 
         accessible_ids = get_user_accessible_dashboard_ids(self.request.user)

@@ -138,7 +138,7 @@ class BootstrapView(APIView):
     def _get_dashboards(self, user):
         queryset = Dashboard.objects.select_related('tenant', 'workspace').prefetch_related('columns').order_by('name')
         queryset = apply_tenant_scope(queryset, user)
-        if is_super_admin(user) or not is_viewer(user):
+        if is_super_admin(user):
             return queryset
 
         accessible_ids = get_user_accessible_dashboard_ids(user)

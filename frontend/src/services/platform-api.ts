@@ -60,6 +60,9 @@ type BackendUser = {
   group_ids?: string[]
   group_names?: string[]
   dashboard_ids?: string[]
+  inherited_dashboard_ids?: string[]
+  direct_dashboard_ids?: string[]
+  blocked_dashboard_ids?: string[]
   status: 'active' | 'inactive'
   last_login: string | null
   avatar_url?: string
@@ -700,6 +703,9 @@ const mapUser = (user: BackendUser): User => ({
   groups: user.group_names ?? (user.group_name ? [user.group_name] : []),
   groupIds: user.group_ids ?? [],
   dashboardIds: user.dashboard_ids ?? [],
+  inheritedDashboardIds: user.inherited_dashboard_ids ?? [],
+  directDashboardIds: user.direct_dashboard_ids ?? [],
+  blockedDashboardIds: user.blocked_dashboard_ids ?? [],
   status: user.status,
   lastAccessAt: user.last_login ?? new Date().toISOString(),
   avatarUrl: user.avatar_url,
@@ -752,6 +758,7 @@ const mapGroup = (
     group.member_names && group.member_names.length > 0
       ? group.member_names
       : group.members.map((memberId) => options?.userNameById?.get(memberId) ?? memberId),
+  dashboardIds: group.dashboards,
   dashboards:
     group.dashboard_names && group.dashboard_names.length > 0
       ? group.dashboard_names

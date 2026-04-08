@@ -301,7 +301,8 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
               .map((groupName) => state.groups.find((item) => item.tenantId === targetTenantId && item.name === groupName)?.id)
               .filter((id): id is string => Boolean(id))
 
-      const selectedDashboardIds = user.dashboardIds ?? []
+      const selectedDirectDashboardIds = user.directDashboardIds ?? []
+      const selectedBlockedDashboardIds = user.blockedDashboardIds ?? []
       const primaryGroupId = selectedGroupIds[0] ?? null
 
       await platformApi.upsertUser({
@@ -313,7 +314,8 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
         role: roleId,
         primary_group: primaryGroupId,
         selected_group_ids: selectedGroupIds,
-        selected_dashboard_ids: selectedDashboardIds,
+        selected_direct_dashboard_ids: selectedDirectDashboardIds,
+        selected_blocked_dashboard_ids: selectedBlockedDashboardIds,
         status: user.status,
         avatar_url: user.avatarUrl ?? '',
         ...(user.password ? { password: user.password } : {}),
