@@ -95,9 +95,53 @@ def _make_jwt_pair(user: User) -> dict:
     return {'access': str(refresh.access_token), 'refresh': str(refresh)}
 
 
-def _redirect_frontend(path: str, params: dict | None = None) -> HttpResponseRedirect:
-    frontend_url = settings.FRONTEND_URL.rstrip('/')
-    url = f'{frontend_url}{path}'
+def _default_frontend_url() -> str:
+    candidates = []
+    configured_frontend = getattr(settings, 'FRONTEND_URL', '').strip()
+    if configured_frontend:
+        candidates.append(configured_frontend)
+    candidates.extend(getattr(settings, 'CORS_ALLOWED_ORIGINS', []))
+
+    for candidate in candidates:
+        parsed = urllib.parse.urlsplit(candidate)
+        if parsed.scheme and parsed.netloc:
+            return f'{parsed.scheme}://{parsed.netloc}'.rstrip('/')
+
+    return 'http://localhost:5173'
+
+
+def _normalize_frontend_url(value: str | None) -> str | None:
+    if not value:
+        return None
+    parsed = urllib.parse.urlsplit(value.strip())
+    if not parsed.scheme or not parsed.netloc:
+        return None
+    return f'{parsed.scheme}://{parsed.netloc}'.rstrip('/')
+
+
+def _allowed_frontend_urls() -> set[str]:
+    candidates = [getattr(settings, 'FRONTEND_URL', ''), *getattr(settings, 'CORS_ALLOWED_ORIGINS', [])]
+    return {url for candidate in candidates if (url := _normalize_frontend_url(candidate))}
+
+
+def _resolve_frontend_url(request) -> str:
+    allowed_urls = _allowed_frontend_urls()
+
+    candidates = [
+        _normalize_frontend_url(request.META.get('HTTP_ORIGIN')),
+        _normalize_frontend_url(request.META.get('HTTP_REFERER')),
+    ]
+
+    for candidate in candidates:
+        if candidate and candidate in allowed_urls:
+            return candidate
+
+    return _default_frontend_url()
+
+
+def _redirect_frontend(path: str, params: dict | None = None, frontend_url: str | None = None) -> HttpResponseRedirect:
+    base_url = _normalize_frontend_url(frontend_url) or _default_frontend_url()
+    url = f'{base_url}{path}'
     if params:
         url += '?' + urllib.parse.urlencode(params)
     return HttpResponseRedirect(url)
@@ -114,7 +158,10 @@ class MicrosoftLoginView(APIView):
     def get(self, request):
         if not getattr(settings, 'MICROSOFT_CLIENT_ID', None):
             return Response({'detail': 'Login com Microsoft nao configurado.'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-        auth_url, _ = ms_oauth.build_auth_url(_callback_redirect_uri(request))
+        auth_url, _ = ms_oauth.build_auth_url(
+            _callback_redirect_uri(request),
+            frontend_url=_resolve_frontend_url(request),
+        )
         return HttpResponseRedirect(auth_url)
 
 
@@ -124,39 +171,73 @@ class MicrosoftCallbackView(APIView):
 
     def get(self, request):
         error = request.query_params.get('error')
+        state = request.query_params.get('state')
+        state_payload = None
+        if state:
+            try:
+                state_payload = ms_oauth.load_state(state)
+            except signing.BadSignature:
+                state_payload = None
+
         if error:
             logger.warning('Microsoft OAuth error: %s', error)
-            return _redirect_frontend('/auth/login', {'ms_error': 'access_denied'})
+            return _redirect_frontend(
+                '/auth/login',
+                {'ms_error': 'access_denied'},
+                frontend_url=(state_payload or {}).get('frontend_url'),
+            )
 
         code = request.query_params.get('code')
-        state = request.query_params.get('state')
-
-        if not code or not ms_oauth.validate_state(state or ''):
-            return _redirect_frontend('/auth/login', {'ms_error': 'invalid_state'})
+        if not code or state_payload is None:
+            return _redirect_frontend(
+                '/auth/login',
+                {'ms_error': 'invalid_state'},
+                frontend_url=(state_payload or {}).get('frontend_url'),
+            )
 
         try:
             profile = ms_oauth.exchange_code_for_profile(code, _callback_redirect_uri(request))
         except Exception:
             logger.exception('Failed to exchange Microsoft OAuth code')
-            return _redirect_frontend('/auth/login', {'ms_error': 'token_failed'})
+            return _redirect_frontend(
+                '/auth/login',
+                {'ms_error': 'token_failed'},
+                frontend_url=state_payload.get('frontend_url'),
+            )
 
         email = (profile.get('mail') or profile.get('userPrincipalName', '')).lower().strip()
         if not email:
-            return _redirect_frontend('/auth/login', {'ms_error': 'no_email'})
+            return _redirect_frontend(
+                '/auth/login',
+                {'ms_error': 'no_email'},
+                frontend_url=state_payload.get('frontend_url'),
+            )
 
         try:
             user = User.objects.select_related('tenant', 'role').get(email=email)
         except User.DoesNotExist:
             # New user — redirect to join flow carrying signed profile
             profile_token = ms_oauth.sign_profile(profile)
-            return _redirect_frontend('/auth/join', {'state': profile_token})
+            return _redirect_frontend(
+                '/auth/join',
+                {'state': profile_token},
+                frontend_url=state_payload.get('frontend_url'),
+            )
 
         # Existing user: block if they registered via email/password
         if user.auth_provider != AuthProvider.MICROSOFT:
-            return _redirect_frontend('/auth/login', {'ms_error': 'email_account'})
+            return _redirect_frontend(
+                '/auth/login',
+                {'ms_error': 'email_account'},
+                frontend_url=state_payload.get('frontend_url'),
+            )
 
         if user.status != 'active':
-            return _redirect_frontend('/auth/login', {'ms_error': 'inactive'})
+            return _redirect_frontend(
+                '/auth/login',
+                {'ms_error': 'inactive'},
+                frontend_url=state_payload.get('frontend_url'),
+            )
 
         tokens = _make_jwt_pair(user)
         safe_create_system_event(
@@ -169,7 +250,11 @@ class MicrosoftCallbackView(APIView):
             tenant=getattr(user, 'tenant', None),
             status_code=200,
         )
-        return _redirect_frontend('/auth/microsoft/callback', tokens)
+        return _redirect_frontend(
+            '/auth/microsoft/callback',
+            tokens,
+            frontend_url=state_payload.get('frontend_url'),
+        )
 
 
 class MicrosoftJoinView(APIView):
@@ -205,9 +290,8 @@ class MicrosoftJoinView(APIView):
         except Role.DoesNotExist:
             viewer_role = None
 
-        user = User.objects.create_user(
+        user = User.objects.create_external_user(
             email=email,
-            password=None,
             first_name=profile.get('first_name', ''),
             last_name=profile.get('last_name', ''),
             tenant=tenant,
@@ -215,9 +299,6 @@ class MicrosoftJoinView(APIView):
             auth_provider=AuthProvider.MICROSOFT,
             status='active',
         )
-        # Microsoft users have no usable password
-        user.set_unusable_password()
-        user.save(update_fields=['password'])
 
         tokens = _make_jwt_pair(user)
         safe_create_system_event(

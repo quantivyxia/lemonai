@@ -21,9 +21,12 @@ PROFILE_SALT = 'ms-profile'
 PROFILE_MAX_AGE = 600  # 10 minutes
 
 
-def build_auth_url(redirect_uri: str) -> tuple[str, str]:
+def build_auth_url(redirect_uri: str, frontend_url: str | None = None) -> tuple[str, str]:
     """Return (auth_url, state). State is a signed value to prevent CSRF."""
-    state = signing.dumps({'ok': True}, salt=STATE_SALT)
+    state_payload = {'ok': True}
+    if frontend_url:
+        state_payload['frontend_url'] = frontend_url
+    state = signing.dumps(state_payload, salt=STATE_SALT)
     params = {
         'client_id': settings.MICROSOFT_CLIENT_ID,
         'response_type': 'code',
@@ -37,9 +40,16 @@ def build_auth_url(redirect_uri: str) -> tuple[str, str]:
     return url, state
 
 
+def load_state(state: str) -> dict:
+    data = signing.loads(state, salt=STATE_SALT, max_age=300)
+    if not isinstance(data, dict) or not data.get('ok'):
+        raise signing.BadSignature('Invalid Microsoft OAuth state payload.')
+    return data
+
+
 def validate_state(state: str) -> bool:
     try:
-        signing.loads(state, salt=STATE_SALT, max_age=300)
+        load_state(state)
         return True
     except signing.BadSignature:
         return False

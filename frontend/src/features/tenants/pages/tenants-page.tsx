@@ -51,6 +51,7 @@ export const TenantsPage = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [form, setForm] = useState<TenantForm>({
     name: '',
+    joinCode: '',
     status: 'active',
     maxUsers: 25,
     maxDashboards: 20,

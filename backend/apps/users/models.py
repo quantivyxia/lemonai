@@ -25,6 +25,20 @@ class UserManager(BaseUserManager):
             raise ValueError('Password obrigatoria.')
         return self._create_user(email, password, **extra_fields)
 
+    def create_external_user(self, email, **extra_fields):
+        """Creates a user authenticated by an external identity provider."""
+        if not email:
+            raise ValueError('Email obrigatorio.')
+
+        extra_fields.setdefault('is_staff', False)
+        extra_fields.setdefault('is_superuser', False)
+
+        email = self.normalize_email(email)
+        user = self.model(email=email, **extra_fields)
+        user.set_unusable_password()
+        user.save(using=self._db)
+        return user
+
     def create_superuser(self, email, password, **extra_fields):
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
