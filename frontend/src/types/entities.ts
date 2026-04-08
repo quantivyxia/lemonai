@@ -46,8 +46,6 @@ export type User = {
   groups: string[]
   groupIds: string[]
   dashboardIds: string[]
-  inheritedDashboardIds: string[]
-  directDashboardIds: string[]
   blockedDashboardIds: string[]
   status: 'active' | 'inactive'
   lastAccessAt: string

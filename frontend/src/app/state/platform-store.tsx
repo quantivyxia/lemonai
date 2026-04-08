@@ -301,7 +301,6 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
               .map((groupName) => state.groups.find((item) => item.tenantId === targetTenantId && item.name === groupName)?.id)
               .filter((id): id is string => Boolean(id))
 
-      const selectedDirectDashboardIds = user.directDashboardIds ?? []
       const selectedBlockedDashboardIds = user.blockedDashboardIds ?? []
       const primaryGroupId = selectedGroupIds[0] ?? null
 
@@ -314,7 +313,6 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
         role: roleId,
         primary_group: primaryGroupId,
         selected_group_ids: selectedGroupIds,
-        selected_direct_dashboard_ids: selectedDirectDashboardIds,
         selected_blocked_dashboard_ids: selectedBlockedDashboardIds,
         status: user.status,
         avatar_url: user.avatarUrl ?? '',

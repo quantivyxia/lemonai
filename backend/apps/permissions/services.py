@@ -21,16 +21,14 @@ def get_user_accessible_dashboard_ids(user):
             DashboardAccess.objects.filter(group_id__in=group_ids, is_active=True).values_list('dashboard_id', flat=True)
         )
 
-    user_rules = list(
-        DashboardAccess.objects.filter(user=user).values_list('dashboard_id', 'is_active')
+    blocked_dashboard_ids = set(
+        DashboardAccess.objects.filter(user=user, is_active=False).values_list('dashboard_id', flat=True)
     )
-    direct_dashboard_ids = {dashboard_id for dashboard_id, is_active in user_rules if is_active}
-    blocked_dashboard_ids = {dashboard_id for dashboard_id, is_active in user_rules if not is_active}
 
-    if is_analyst(user) and not group_ids and not user_rules and not role_dashboard_ids:
+    if is_analyst(user) and not group_ids and not blocked_dashboard_ids and not role_dashboard_ids:
         return None
 
-    effective_ids = (role_dashboard_ids | group_dashboard_ids | direct_dashboard_ids) - blocked_dashboard_ids
+    effective_ids = (role_dashboard_ids | group_dashboard_ids) - blocked_dashboard_ids
     return list(effective_ids)
 
 
