@@ -45,6 +45,10 @@ class InsightHubTokenObtainPairSerializer(TokenObtainPairSerializer):
         data = super().validate(attrs)
         if self.user.status != 'active':
             raise serializers.ValidationError('Usuario inativo.')
+        if getattr(self.user, 'auth_provider', 'email') == 'microsoft':
+            raise serializers.ValidationError(
+                'Esta conta usa login com a Microsoft. Utilize o botao "Entrar com Microsoft".'
+            )
         data['user'] = MeSerializer(self.user).data
         return data
 

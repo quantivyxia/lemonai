@@ -43,6 +43,11 @@ class UserStatus(models.TextChoices):
     INACTIVE = 'inactive', 'Inativo'
 
 
+class AuthProvider(models.TextChoices):
+    EMAIL = 'email', 'E-mail'
+    MICROSOFT = 'microsoft', 'Microsoft'
+
+
 class User(AbstractBaseUser, PermissionsMixin, UUIDTimeStampedModel):
     first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
@@ -53,6 +58,7 @@ class User(AbstractBaseUser, PermissionsMixin, UUIDTimeStampedModel):
     primary_group = models.ForeignKey('users.UserGroup', on_delete=models.SET_NULL, null=True, blank=True, related_name='primary_members')
 
     status = models.CharField(max_length=20, choices=UserStatus.choices, default=UserStatus.ACTIVE)
+    auth_provider = models.CharField(max_length=20, choices=AuthProvider.choices, default=AuthProvider.EMAIL)
     avatar_url = models.URLField(blank=True)
 
     is_staff = models.BooleanField(default=False)

@@ -14,6 +14,7 @@ export type TicketPriority = 'low' | 'medium' | 'high' | 'urgent'
 export type Tenant = {
   id: string
   name: string
+  joinCode: string
   status: TenantStatus
   usersCount: number
   dashboardsCount: number

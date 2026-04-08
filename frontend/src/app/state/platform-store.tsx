@@ -268,6 +268,7 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
       await platformApi.upsertTenant({
         id: tenant.id,
         name: tenant.name.trim(),
+        join_code: tenant.joinCode?.trim().toUpperCase() || undefined,
         status: tenant.status,
         max_users: tenant.maxUsers,
         max_dashboards: tenant.maxDashboards,

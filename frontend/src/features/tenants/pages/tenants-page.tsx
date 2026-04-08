@@ -1,4 +1,4 @@
-import { AlertTriangle, Building2, LifeBuoy, Palette, Plus, Search, Users } from 'lucide-react'
+import { AlertTriangle, Building2, Copy, LifeBuoy, Palette, Plus, Search, Users } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -24,6 +24,7 @@ import type { Tenant } from '@/types/entities'
 type TenantForm = {
   id?: string
   name: string
+  joinCode: string
   status: Tenant['status']
   maxUsers: number
   maxDashboards: number
@@ -77,6 +78,7 @@ export const TenantsPage = () => {
 
     setForm({
       name: '',
+      joinCode: '',
       status: 'active',
       maxUsers: 25,
       maxDashboards: 20,
@@ -92,6 +94,7 @@ export const TenantsPage = () => {
     setForm({
       id: tenant.id,
       name: tenant.name,
+      joinCode: tenant.joinCode,
       status: tenant.status,
       maxUsers: tenant.maxUsers,
       maxDashboards: tenant.maxDashboards,
@@ -133,6 +136,7 @@ export const TenantsPage = () => {
       await upsertTenant({
         id: form.id,
         name: form.name.trim(),
+        joinCode: form.joinCode.trim().toUpperCase(),
         status: form.status,
         maxUsers: Math.floor(form.maxUsers),
         maxDashboards: Math.floor(form.maxDashboards),
@@ -315,6 +319,27 @@ export const TenantsPage = () => {
                   {hasTenantCommercialAlert(tenant) ? 'Requer acao comercial' : 'Dentro do contratado'}
                 </p>
               </div>
+              <div className="rounded-xl border border-border/70 bg-slate-50/60 p-3">
+                <p className="text-xs uppercase tracking-[0.04em] text-muted-foreground">Codigo de acesso</p>
+                <div className="mt-1 flex items-center gap-2">
+                  <p className="font-mono text-sm font-semibold tracking-wider text-slate-900">
+                    {tenant.joinCode || '—'}
+                  </p>
+                  {tenant.joinCode ? (
+                    <button
+                      type="button"
+                      title="Copiar codigo"
+                      className="rounded p-0.5 text-muted-foreground transition hover:text-foreground"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(tenant.joinCode)
+                        toast.success('Codigo copiado.')
+                      }}
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                  ) : null}
+                </div>
+              </div>
             </div>
 
             <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
@@ -355,6 +380,21 @@ export const TenantsPage = () => {
                 value={form.name}
                 onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
               />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700">Codigo de acesso</label>
+              <Input
+                className="mt-1 font-mono uppercase tracking-widest"
+                placeholder="Gerado automaticamente se vazio"
+                value={form.joinCode}
+                maxLength={20}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, joinCode: event.target.value.toUpperCase() }))
+                }
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Usuarios usam este codigo para ingressar via login com a Microsoft.
+              </p>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               <div>

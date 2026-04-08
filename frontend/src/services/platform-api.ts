@@ -29,6 +29,7 @@ type BackendTenant = {
   id: string
   name: string
   slug?: string
+  join_code?: string
   domain?: string | null
   status: 'active' | 'inactive' | 'suspended'
   max_users?: number
@@ -646,6 +647,7 @@ const toNumber = (value: number | string | null | undefined, fallback = 0) => {
 const mapTenant = (tenant: BackendTenant, options?: { brandingTenantIds?: Set<string> }): Tenant => ({
   id: tenant.id,
   name: tenant.name,
+  joinCode: tenant.join_code ?? '',
   status: normalizeTenantStatus(tenant.status),
   usersCount: tenant.users_count ?? 0,
   dashboardsCount: tenant.dashboards_count ?? 0,

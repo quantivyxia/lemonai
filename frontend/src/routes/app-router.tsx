@@ -16,6 +16,8 @@ const lazyPage = <T extends { [key: string]: ComponentType<object> }, K extends 
   })
 
 const LoginPage = lazyPage(() => import('@/features/auth/pages/login-page'), 'LoginPage')
+const MicrosoftCallbackPage = lazyPage(() => import('@/features/auth/pages/microsoft-callback-page'), 'MicrosoftCallbackPage')
+const JoinTenantPage = lazyPage(() => import('@/features/auth/pages/join-tenant-page'), 'JoinTenantPage')
 const NotFoundPage = lazyPage(() => import('@/features/common/pages/not-found-page'), 'NotFoundPage')
 const RouteErrorPage = lazyPage(() => import('@/features/common/pages/route-error-page'), 'RouteErrorPage')
 const DashboardHomePage = lazyPage(
@@ -75,6 +77,14 @@ export const appRouter = createBrowserRouter([
       {
         path: 'login',
         element: withSuspense(<LoginPage />),
+      },
+      {
+        path: 'join',
+        element: withSuspense(<JoinTenantPage />),
+      },
+      {
+        path: 'microsoft/callback',
+        element: withSuspense(<MicrosoftCallbackPage />),
       },
     ],
   },

@@ -1,15 +1,26 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { motion } from 'framer-motion'
 import { Eye, EyeOff, Lock, Mail } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAuth } from '@/hooks/use-auth'
+
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, '') ?? 'http://127.0.0.1:8000/api'
+
+const MS_ERROR_MESSAGES: Record<string, string> = {
+  access_denied: 'Acesso negado pela Microsoft.',
+  invalid_state: 'Sessao invalida. Tente novamente.',
+  token_failed: 'Falha ao autenticar com a Microsoft.',
+  no_email: 'Nao foi possivel obter seu e-mail da Microsoft.',
+  email_account: 'Este e-mail ja possui cadastro com senha. Use o login por e-mail.',
+  inactive: 'Sua conta esta inativa. Entre em contato com o suporte.',
+}
 
 const loginSchema = z.object({
   email: z.email('Informe um e-mail valido.'),
@@ -21,8 +32,20 @@ type LoginFormData = z.infer<typeof loginSchema>
 
 export const LoginForm = () => {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { login } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
+
+  useEffect(() => {
+    const msError = searchParams.get('ms_error')
+    if (msError) {
+      toast.error(MS_ERROR_MESSAGES[msError] ?? 'Erro ao autenticar com a Microsoft.')
+    }
+  }, [searchParams])
+
+  const handleMicrosoftLogin = () => {
+    window.location.href = `${API_BASE_URL}/authentication/microsoft/`
+  }
 
   const {
     register,
@@ -144,6 +167,28 @@ export const LoginForm = () => {
           {isSubmitting ? 'Validando acesso...' : 'Entrar na plataforma'}
         </Button>
       </form>
+
+      {/* Microsoft login */}
+      <div className="mt-5">
+        <div className="relative flex items-center gap-3">
+          <div className="h-px flex-1 bg-border/60" />
+          <span className="text-xs text-muted-foreground">ou</span>
+          <div className="h-px flex-1 bg-border/60" />
+        </div>
+        <button
+          type="button"
+          onClick={handleMicrosoftLogin}
+          className="mt-4 flex w-full items-center justify-center gap-3 rounded-lg border border-border/70 bg-white px-4 py-2.5 text-sm font-medium text-foreground shadow-sm transition hover:bg-slate-50 active:scale-[0.98]"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 21 21" className="h-4 w-4 flex-shrink-0">
+            <rect x="1" y="1" width="9" height="9" fill="#f25022" />
+            <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
+            <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
+            <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
+          </svg>
+          Entrar com Microsoft
+        </button>
+      </div>
 
       {/* Divider + footer */}
       <div className="mt-8 border-t border-border/50 pt-6">

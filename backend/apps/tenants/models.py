@@ -1,3 +1,6 @@
+import random
+import string
+
 from django.db import models
 from django.utils.text import slugify
 
@@ -10,9 +13,16 @@ class TenantStatus(models.TextChoices):
     SUSPENDED = 'suspended', 'Suspenso'
 
 
+def _generate_join_code(name: str) -> str:
+    prefix = ''.join(c for c in name.upper().split()[0] if c.isalnum())[:6]
+    suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
+    return f'{prefix}-{suffix}'
+
+
 class Tenant(UUIDTimeStampedModel):
     name = models.CharField(max_length=180, unique=True)
     slug = models.SlugField(max_length=200, unique=True, blank=True)
+    join_code = models.CharField(max_length=20, unique=True, blank=True, db_index=True)
     domain = models.CharField(max_length=255, blank=True, null=True, unique=True)
     status = models.CharField(max_length=20, choices=TenantStatus.choices, default=TenantStatus.ACTIVE)
     max_users = models.PositiveIntegerField(default=25)
@@ -31,6 +41,11 @@ class Tenant(UUIDTimeStampedModel):
     def save(self, *args, **kwargs):
         if not self.slug:
             self.slug = slugify(self.name)
+        if not self.join_code:
+            code = _generate_join_code(self.name)
+            while Tenant.objects.filter(join_code=code).exists():
+                code = _generate_join_code(self.name)
+            self.join_code = code
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:

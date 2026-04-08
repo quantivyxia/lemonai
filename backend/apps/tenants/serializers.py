@@ -23,6 +23,7 @@ class TenantSerializer(serializers.ModelSerializer):
             'id',
             'name',
             'slug',
+            'join_code',
             'domain',
             'status',
             'max_users',
@@ -45,7 +46,7 @@ class TenantSerializer(serializers.ModelSerializer):
             'dashboards_usage_percent',
             'support_usage_percent',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'slug', 'created_at', 'updated_at']
 
     def _safe_percent(self, current: int, limit: int) -> int:
         if limit <= 0:
@@ -93,6 +94,19 @@ class TenantSerializer(serializers.ModelSerializer):
         if total <= 0:
             return 100 if consumed > 0 else 0
         return min(999, int((consumed / total) * 100))
+
+    def validate_join_code(self, value):
+        value = value.strip().upper()
+        if not value:
+            raise serializers.ValidationError('O codigo da empresa nao pode ser vazio.')
+        # Uniqueness check excluding self on update
+        qs = Tenant.objects.filter(join_code=value)
+        instance = self.instance
+        if instance:
+            qs = qs.exclude(pk=instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError('Este codigo ja esta em uso por outro tenant.')
+        return value
 
     def validate_max_users(self, value):
         if value < 1:
