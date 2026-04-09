@@ -78,8 +78,22 @@ export const UsersTable = () => {
   })
 
   const buildSuggestedPassword = () => {
-    const randomDigits = Math.floor(100000 + Math.random() * 900000)
-    return `${randomDigits}`
+    const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+    const digits = '23456789'
+    const symbols = '@#$%&*!?'
+    const allChars = `${letters}${digits}${symbols}`
+    const requiredChars = [
+      letters[Math.floor(Math.random() * letters.length)],
+      digits[Math.floor(Math.random() * digits.length)],
+    ]
+
+    while (requiredChars.length < 8) {
+      requiredChars.push(allChars[Math.floor(Math.random() * allChars.length)])
+    }
+
+    return requiredChars
+      .sort(() => Math.random() - 0.5)
+      .join('')
   }
 
   const scopedUsers = useMemo(
@@ -241,12 +255,12 @@ export const UsersTable = () => {
       toast.error('Preencha nome, sobrenome e e-mail.')
       return
     }
-    if (isCreate && !form.password.trim()) {
+    if (isCreate && !form.password) {
       toast.error('Defina uma senha inicial para o usuario.')
       return
     }
-    if (form.password.trim() && !/^\d{6}$/.test(form.password.trim())) {
-      toast.error('A senha inicial deve ter exatamente 6 digitos numericos.')
+    if (form.password && !/^(?=.*[A-Za-z])(?=.*\d).{6,}$/.test(form.password)) {
+      toast.error('A senha deve ter pelo menos 6 caracteres e conter letras e numeros.')
       return
     }
 
@@ -255,7 +269,7 @@ export const UsersTable = () => {
         .filter((group) => form.groupIds.includes(group.id))
         .map((group) => group.name)
 
-      const password = form.password.trim()
+      const password = form.password
 
       await upsertUser({
         id: form.id,
@@ -287,8 +301,8 @@ export const UsersTable = () => {
   }
 
   const copyPasswordToClipboard = async () => {
-    if (!form.password.trim()) return
-    await navigator.clipboard.writeText(form.password.trim())
+    if (!form.password) return
+    await navigator.clipboard.writeText(form.password)
     toast.success('Senha copiada para a area de transferencia.')
   }
 
@@ -705,8 +719,8 @@ export const UsersTable = () => {
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
                 {form.id
-                  ? 'Voce pode visualizar ou trocar a senha. Use 6 digitos numericos.'
-                  : 'Sugestao automatica: senha numerica de 6 digitos.'}
+                  ? 'Voce pode visualizar ou trocar a senha. Use no minimo 6 caracteres com letras e numeros.'
+                  : 'Sugestao automatica: senha com no minimo 6 caracteres, incluindo letras e numeros.'}
               </p>
             </div>
             <div className="grid gap-3 md:grid-cols-2">

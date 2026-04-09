@@ -1,10 +1,15 @@
 from rest_framework import serializers
+import re
 
 from apps.common.services import enforce_same_tenant, is_super_admin
 from apps.dashboards.models import Dashboard
 from apps.permissions.models import RoleCode
 from apps.users.models import User, UserGroup, UserStatus
 from apps.users.services import sync_group_dashboard_access, sync_user_dashboard_blocks
+
+
+PASSWORD_POLICY_MESSAGE = 'A senha deve ter pelo menos 6 caracteres e conter letras e numeros.'
+PASSWORD_POLICY_REGEX = re.compile(r'^(?=.*[A-Za-z])(?=.*\d).{6,}$')
 
 
 class UserGroupSerializer(serializers.ModelSerializer):
@@ -190,8 +195,8 @@ class UserSerializer(serializers.ModelSerializer):
         password = attrs.get('password')
         if self.instance is None and not password:
             raise serializers.ValidationError({'password': 'Senha obrigatoria para criar usuario.'})
-        if password and (not password.isdigit() or len(password) != 6):
-            raise serializers.ValidationError({'password': 'A senha deve conter exatamente 6 digitos numericos.'})
+        if password and not PASSWORD_POLICY_REGEX.match(password):
+            raise serializers.ValidationError({'password': PASSWORD_POLICY_MESSAGE})
 
         primary_group = attrs.get('primary_group') or getattr(self.instance, 'primary_group', None)
         if primary_group and target_tenant and primary_group.tenant_id != target_tenant.id:

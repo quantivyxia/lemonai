@@ -10,7 +10,12 @@ from apps.dashboards.models import Dashboard
 from apps.users.filters import UserFilter, UserGroupFilter
 from apps.users.models import User, UserGroup
 from apps.users.permissions import GroupPermission, UserManagementPermission
-from apps.users.serializers import UserGroupSerializer, UserSerializer
+from apps.users.serializers import (
+    PASSWORD_POLICY_MESSAGE,
+    PASSWORD_POLICY_REGEX,
+    UserGroupSerializer,
+    UserSerializer,
+)
 
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -53,9 +58,9 @@ class UserViewSet(viewsets.ModelViewSet):
         password = request.data.get('password')
         if not password:
             return Response({'detail': 'password obrigatoria.'}, status=status.HTTP_400_BAD_REQUEST)
-        if not str(password).isdigit() or len(str(password)) != 6:
+        if not PASSWORD_POLICY_REGEX.match(str(password)):
             return Response(
-                {'detail': 'A senha deve conter exatamente 6 digitos numericos.'},
+                {'detail': PASSWORD_POLICY_MESSAGE},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         user.set_password(password)
