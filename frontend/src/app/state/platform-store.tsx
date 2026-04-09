@@ -55,7 +55,7 @@ type PlatformStoreValue = {
     > & { id?: string },
   ) => Promise<void>
   deleteTenant: (tenantId: string) => Promise<void>
-  upsertUser: (user: Omit<User, 'id' | 'tenantName' | 'lastAccessAt'> & { id?: string; lastAccessAt?: string }) => Promise<void>
+  upsertUser: (user: Omit<User, 'id' | 'tenantName' | 'lastAccessAt'> & { id?: string; lastAccessAt?: string }) => Promise<User>
   deleteUser: (userId: string) => Promise<void>
   deleteUsers: (userIds: string[]) => Promise<void>
   toggleUserStatus: (userId: string) => Promise<void>
@@ -304,7 +304,7 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
       const selectedBlockedDashboardIds = user.blockedDashboardIds ?? []
       const primaryGroupId = selectedGroupIds[0] ?? null
 
-      await platformApi.upsertUser({
+      const savedUser = await platformApi.upsertUser({
         id: user.id,
         first_name: user.firstName.trim(),
         last_name: user.lastName.trim(),
@@ -319,6 +319,7 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
         ...(user.password ? { password: user.password } : {}),
       })
       await Promise.all([reloadUsers(), reloadTenants()])
+      return savedUser
     },
     [reloadTenants, reloadUsers, roleIds, state.groups],
   )

@@ -964,16 +964,16 @@ export const platformApi = {
 
   upsertUser(payload: Record<string, unknown> & { id?: string }) {
     if (payload.id) {
-      return apiRequest(`/users/${payload.id}/`, {
+      return apiRequest<BackendUser>(`/users/${payload.id}/`, {
         method: 'PATCH',
         body: JSON.stringify(payload),
-      })
+      }).then(mapUser)
     }
 
-    return apiRequest('/users/', {
+    return apiRequest<BackendUser>('/users/', {
       method: 'POST',
       body: JSON.stringify(payload),
-    })
+    }).then(mapUser)
   },
 
   deleteUser(userId: string) {

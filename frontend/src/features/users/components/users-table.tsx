@@ -27,7 +27,7 @@ import { usePlatformStore } from '@/hooks/use-platform-store'
 import { useTenantScope } from '@/hooks/use-tenant-scope'
 import { formatDate } from '@/lib/utils'
 import { platformApi } from '@/services/platform-api'
-import type { User } from '@/types/entities'
+import type { RLSRule, User } from '@/types/entities'
 
 const roleLabelMap: Record<User['role'], string> = {
   super_admin: 'Super_admin',
@@ -54,17 +54,36 @@ type UserForm = {
   status: User['status']
 }
 
+const buildRLSMirrorKey = (
+  rule: Pick<
+    RLSRule,
+    'dashboardId' | 'tableName' | 'columnName' | 'operator' | 'ruleType' | 'values' | 'notes' | 'isActive'
+  >,
+) =>
+  JSON.stringify({
+    dashboardId: rule.dashboardId,
+    tableName: rule.tableName.trim(),
+    columnName: rule.columnName.trim(),
+    operator: rule.operator,
+    ruleType: rule.ruleType,
+    values: [...rule.values].map((value) => value.trim()).sort(),
+    notes: rule.notes?.trim() ?? '',
+    isActive: rule.isActive,
+  })
+
 export const UsersTable = () => {
   const navigate = useNavigate()
   const { actorUser, isViewAsMode, startViewAs } = useAuth()
   const { isSuperAdmin, userTenantName, userTenantId, filterByTenant } = useTenantScope()
-  const { users, tenants, groups, dashboards, upsertUser, toggleUserStatus, deleteUser, deleteUsers } = usePlatformStore()
+  const { users, tenants, groups, dashboards, rlsRules, reloadData, upsertUser, toggleUserStatus, deleteUser, deleteUsers } = usePlatformStore()
   const [searchTerm, setSearchTerm] = useState('')
   const [tenantFilter, setTenantFilter] = useState(isSuperAdmin ? 'all' : (userTenantName ?? 'all'))
   const [statusFilter, setStatusFilter] = useState('all')
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [mirrorAccessEnabled, setMirrorAccessEnabled] = useState(false)
+  const [mirrorSourceUserId, setMirrorSourceUserId] = useState('')
   const [form, setForm] = useState<UserForm>({
     tenantId: userTenantId ?? tenants[0]?.id ?? '',
     firstName: '',
@@ -165,10 +184,32 @@ export const UsersTable = () => {
       ),
     [dashboardOptions, inheritedDashboardIdSet, visibleInheritedDashboardIds],
   )
+  const mirrorSourceOptions = useMemo(
+    () =>
+      scopedUsers
+        .filter((user) => user.tenantId === form.tenantId && user.id !== form.id)
+        .sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`))
+        .map((user) => ({
+          value: user.id,
+          label: `${user.firstName} ${user.lastName}`.trim(),
+          keywords: `${user.email} ${user.groups.join(' ')}`,
+        })),
+    [form.id, form.tenantId, scopedUsers],
+  )
+  const mirrorSourceUser = useMemo(
+    () => scopedUsers.find((user) => user.id === mirrorSourceUserId) ?? null,
+    [mirrorSourceUserId, scopedUsers],
+  )
 
   useEffect(() => {
     setTenantFilter(isSuperAdmin ? 'all' : (userTenantName ?? 'all'))
   }, [isSuperAdmin, userTenantName])
+
+  useEffect(() => {
+    if (!mirrorSourceUserId) return
+    if (mirrorSourceOptions.some((option) => option.value === mirrorSourceUserId)) return
+    setMirrorSourceUserId('')
+  }, [mirrorSourceOptions, mirrorSourceUserId])
 
   useEffect(() => {
     if (!isDialogOpen) return
@@ -212,6 +253,8 @@ export const UsersTable = () => {
     if (isViewAsMode) return
     const nextTenantId = userTenantId ?? tenants[0]?.id ?? ''
     setShowPassword(false)
+    setMirrorAccessEnabled(false)
+    setMirrorSourceUserId('')
     setForm({
       tenantId: nextTenantId,
       firstName: '',
@@ -229,6 +272,8 @@ export const UsersTable = () => {
   const openEditDialog = (user: User) => {
     if (isViewAsMode) return
     setShowPassword(false)
+    setMirrorAccessEnabled(false)
+    setMirrorSourceUserId('')
     setForm({
       id: user.id,
       tenantId: user.tenantId,
@@ -242,6 +287,68 @@ export const UsersTable = () => {
       status: user.status,
     })
     setIsDialogOpen(true)
+  }
+
+  const applyMirroredAccess = (sourceUserId: string) => {
+    setMirrorSourceUserId(sourceUserId)
+    const sourceUser = scopedUsers.find((user) => user.id === sourceUserId)
+    if (!sourceUser) return
+
+    const allowedGroupIds = new Set(groupOptions.map((group) => group.id))
+    const allowedDashboardIds = new Set(dashboardOptions.map((dashboard) => dashboard.id))
+
+    setForm((current) => ({
+      ...current,
+      groupIds: (sourceUser.groupIds ?? []).filter((groupId) => allowedGroupIds.has(groupId)),
+      blockedDashboardIds: (sourceUser.blockedDashboardIds ?? []).filter((dashboardId) => allowedDashboardIds.has(dashboardId)),
+    }))
+  }
+
+  const syncMirroredRLSRules = async (targetUserId: string, sourceUserId: string) => {
+    const sourceRules = rlsRules.filter((rule) => rule.userId === sourceUserId && rule.tenantId === form.tenantId)
+    const targetRules = rlsRules.filter((rule) => rule.userId === targetUserId && rule.tenantId === form.tenantId)
+
+    const remainingTargetRules = new Map<string, typeof targetRules>()
+    for (const rule of targetRules) {
+      const key = buildRLSMirrorKey(rule)
+      const queue = remainingTargetRules.get(key) ?? []
+      queue.push(rule)
+      remainingTargetRules.set(key, queue)
+    }
+
+    const createPromises: Promise<unknown>[] = []
+    for (const rule of sourceRules) {
+      const key = buildRLSMirrorKey(rule)
+      const queue = remainingTargetRules.get(key)
+      if (queue && queue.length > 0) {
+        queue.shift()
+        if (queue.length === 0) {
+          remainingTargetRules.delete(key)
+        }
+        continue
+      }
+
+      createPromises.push(
+        platformApi.upsertRLSRule({
+          tenant: rule.tenantId,
+          dashboard: rule.dashboardId,
+          user: targetUserId,
+          table_name: rule.tableName,
+          column_name: rule.columnName,
+          operator: rule.operator,
+          rule_type: rule.ruleType,
+          values: rule.values,
+          notes: rule.notes ?? '',
+          is_active: rule.isActive,
+        }),
+      )
+    }
+
+    const deletePromises = [...remainingTargetRules.values()]
+      .flat()
+      .map((rule) => platformApi.deleteRLSRule(rule.id))
+
+    await Promise.all([...deletePromises, ...createPromises])
   }
 
   const submitForm = async () => {
@@ -263,6 +370,10 @@ export const UsersTable = () => {
       toast.error('A senha deve ter pelo menos 6 caracteres e conter letras e numeros.')
       return
     }
+    if (mirrorAccessEnabled && !mirrorSourceUserId) {
+      toast.error('Selecione o usuario que servira de base para espelhar os acessos.')
+      return
+    }
 
     try {
       const selectedGroups = groupOptions
@@ -271,7 +382,7 @@ export const UsersTable = () => {
 
       const password = form.password
 
-      await upsertUser({
+      const savedUser = await upsertUser({
         id: form.id,
         tenantId: form.tenantId,
         firstName: form.firstName.trim(),
@@ -288,6 +399,10 @@ export const UsersTable = () => {
       })
       if (!isCreate && form.id && password) {
         await platformApi.setUserPassword(form.id, password)
+      }
+      if (mirrorAccessEnabled && mirrorSourceUserId) {
+        await syncMirroredRLSRules(savedUser.id, mirrorSourceUserId)
+        await reloadData()
       }
       toast.success(form.id ? 'Usuario atualizado.' : 'Usuario criado com sucesso.')
       setIsDialogOpen(false)
@@ -751,6 +866,49 @@ export const UsersTable = () => {
               </div>
             </div>
             <div className="grid gap-3">
+              <div className="flex items-start gap-3">
+                <Checkbox
+                  id="mirror-access"
+                  checked={mirrorAccessEnabled}
+                  onCheckedChange={(checked) => {
+                    const isChecked = checked === true
+                    setMirrorAccessEnabled(isChecked)
+                    if (!isChecked) {
+                      setMirrorSourceUserId('')
+                    }
+                  }}
+                  className="mt-0.5"
+                />
+                <div className="min-w-0 flex-1">
+                  <label htmlFor="mirror-access" className="text-sm font-medium text-slate-700">
+                    Espelhar acessos de outro usuario
+                  </label>
+                  {mirrorAccessEnabled ? (
+                    <div className="mt-3">
+                      <SearchableSelect
+                        value={mirrorSourceUserId}
+                        onValueChange={applyMirroredAccess}
+                        options={mirrorSourceOptions}
+                        placeholder={
+                          mirrorSourceOptions.length > 0
+                            ? 'Selecione o usuario base'
+                            : 'Nenhum usuario elegivel neste tenant'
+                        }
+                        searchPlaceholder="Pesquisar usuario"
+                        emptyMessage="Nenhum usuario encontrado."
+                        disabled={mirrorSourceOptions.length === 0}
+                        triggerClassName="h-11 bg-white"
+                      />
+                      {mirrorSourceUser ? (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          Base selecionada: {mirrorSourceUser.firstName} {mirrorSourceUser.lastName}. Voce ainda pode ajustar grupos e dashboards antes de salvar.
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
               <div>
                 <label className="text-sm font-medium text-slate-700">Grupos (multiplos)</label>
                 <div className="mt-1">
