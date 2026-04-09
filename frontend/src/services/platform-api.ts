@@ -453,6 +453,7 @@ const buildBootstrapPayload = (bootstrap: BackendBootstrapPayload): BootstrapPay
     tenantName: tenantById.get(group.tenant) ?? 'Tenant',
     name: group.name,
     description: group.description,
+    dashboardIds: group.dashboards,
     users:
       group.member_names && group.member_names.length > 0
         ? group.member_names

@@ -118,16 +118,26 @@ export const UsersTable = () => {
     () => new Map(dashboards.map((dashboard) => [dashboard.id, dashboard.name])),
     [dashboards],
   )
+  const dashboardIdByName = useMemo(
+    () => new Map(dashboardOptions.map((dashboard) => [dashboard.name, dashboard.id])),
+    [dashboardOptions],
+  )
   const inheritedDashboardIds = useMemo(
     () =>
       [
         ...new Set(
           groupOptions
             .filter((group) => form.groupIds.includes(group.id))
-            .flatMap((group) => group.dashboardIds ?? []),
+            .flatMap((group) =>
+              group.dashboardIds && group.dashboardIds.length > 0
+                ? group.dashboardIds
+                : group.dashboards
+                    .map((dashboardName) => dashboardIdByName.get(dashboardName))
+                    .filter((dashboardId): dashboardId is string => Boolean(dashboardId)),
+            ),
         ),
       ],
-    [form.groupIds, groupOptions],
+    [dashboardIdByName, form.groupIds, groupOptions],
   )
   const inheritedDashboardIdSet = useMemo(() => new Set(inheritedDashboardIds), [inheritedDashboardIds])
   const visibleInheritedDashboardIds = useMemo(
