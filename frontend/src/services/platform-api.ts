@@ -1171,6 +1171,23 @@ export const platformApi = {
     )
   },
 
+  deletePowerBIReport(connectionId: string, payload: { workspace_id: string; report_id: string }) {
+    return apiRequest<{
+      detail: string
+      fullyDeleted: boolean
+      reportId: string
+      reportName?: string
+      datasetId?: string
+      datasetDeleted: boolean
+      datasetError?: string
+      deletedLocal: number
+      deletedNames: string[]
+    }>(`/powerbi/connections/${connectionId}/delete-report/`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+
   uploadPowerBIPbix(
     connectionId: string,
     payload: {

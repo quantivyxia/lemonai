@@ -144,6 +144,84 @@ class PowerBIConnectionViewSet(viewsets.ModelViewSet):
         except PowerBIServiceError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
+    @action(detail=True, methods=['post'], url_path='delete-report')
+    def delete_report(self, request, pk=None):
+        connection = self.get_object()
+        workspace_id = str(request.data.get('workspace_id') or '').strip()
+        report_id = str(request.data.get('report_id') or '').strip()
+
+        if not workspace_id or not report_id:
+            return Response(
+                {'detail': 'workspace_id e report_id sao obrigatorios.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        denied_response = self._ensure_workspace_allowed(connection, workspace_id)
+        if denied_response:
+            return denied_response
+
+        client = PowerBIClient(connection)
+        try:
+            report = client.get_report(workspace_id, report_id)
+            report_name = str(report.get('name') or '').strip()
+            dataset_id = str(report.get('datasetId') or '').strip()
+
+            client.delete_report(workspace_id, report_id)
+
+            dataset_deleted = not dataset_id
+            dataset_error = ''
+            if dataset_id:
+                try:
+                    client.delete_dataset(workspace_id, dataset_id)
+                    dataset_deleted = True
+                except PowerBIServiceError as exc:
+                    dataset_error = str(exc)
+
+            local_dashboards = Dashboard.objects.filter(
+                tenant=connection.tenant,
+                workspace__external_workspace_id=workspace_id,
+                report_id=report_id,
+            )
+            deleted_local = local_dashboards.count()
+            deleted_names = list(local_dashboards.values_list('name', flat=True)[:10])
+            if deleted_local:
+                local_dashboards.delete()
+
+            connection.last_sync_at = timezone.now()
+            connection.last_error = dataset_error
+            connection.save(update_fields=['last_sync_at', 'last_error', 'updated_at'])
+
+            detail = (
+                'Relatorio e modelo semantico excluidos com sucesso do Power BI e removidos da plataforma.'
+                if dataset_deleted
+                else (
+                    'O relatorio foi excluido e removido da plataforma, mas nao foi possivel excluir o modelo '
+                    f'semantico vinculado: {dataset_error}'
+                )
+            )
+
+            return Response(
+                {
+                    'detail': detail,
+                    'fullyDeleted': dataset_deleted,
+                    'reportId': report_id,
+                    'reportName': report_name,
+                    'datasetId': dataset_id,
+                    'datasetDeleted': dataset_deleted,
+                    'datasetError': dataset_error,
+                    'deletedLocal': deleted_local,
+                    'deletedNames': deleted_names,
+                }
+            )
+        except PowerBIServiceError as exc:
+            connection.last_error = str(exc)
+            connection.save(update_fields=['last_error', 'updated_at'])
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:  # noqa: BLE001
+            connection.last_error = str(exc)
+            connection.save(update_fields=['last_error', 'updated_at'])
+            return Response({'detail': 'Erro interno ao excluir dashboard do Power BI.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
     @action(detail=True, methods=['get'], url_path='datasets')
     def list_datasets(self, request, pk=None):
         connection = self.get_object()

@@ -250,6 +250,14 @@ class PowerBIClient:
     def get_report(self, workspace_id: str, report_id: str):
         return self._request('GET', f'groups/{workspace_id}/reports/{report_id}')
 
+    def delete_report(self, workspace_id: str, report_id: str):
+        self._request('DELETE', f'groups/{workspace_id}/reports/{report_id}')
+        return {'workspaceId': workspace_id, 'reportId': report_id}
+
+    def delete_dataset(self, workspace_id: str, dataset_id: str):
+        self._request('DELETE', f'groups/{workspace_id}/datasets/{dataset_id}')
+        return {'workspaceId': workspace_id, 'datasetId': dataset_id}
+
     def generate_embed_token(
         self,
         workspace_id: str,
