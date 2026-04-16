@@ -25,7 +25,6 @@ const MS_ERROR_MESSAGES: Record<string, string> = {
 const loginSchema = z.object({
   email: z.email('Informe um e-mail valido.'),
   password: z.string().min(6, 'A senha precisa ter ao menos 6 caracteres.'),
-  remember: z.boolean(),
 })
 
 type LoginFormData = z.infer<typeof loginSchema>
@@ -53,7 +52,7 @@ export const LoginForm = () => {
     formState: { errors, isSubmitting },
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { email: '', password: '', remember: false },
+    defaultValues: { email: '', password: '' },
   })
 
   const onSubmit = async (values: LoginFormData) => {
@@ -140,22 +139,6 @@ export const LoginForm = () => {
           {errors.password && (
             <p className="text-xs text-destructive">{errors.password.message}</p>
           )}
-        </div>
-
-        {/* Remember me */}
-        <div className="flex items-center gap-2.5">
-          <input
-            {...register('remember')}
-            id="remember"
-            type="checkbox"
-            className="h-4 w-4 cursor-pointer rounded border-border accent-primary"
-          />
-          <label
-            htmlFor="remember"
-            className="cursor-pointer select-none text-sm text-muted-foreground"
-          >
-            Manter sessao ativa
-          </label>
         </div>
 
         {/* Submit */}

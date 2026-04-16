@@ -3,7 +3,7 @@ import {
   Maximize2,
   RefreshCcw,
 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { factories, models, service } from 'powerbi-client'
 import { Link, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -49,6 +49,8 @@ export const DashboardViewPage = () => {
   const embedHostRef = useRef<HTMLDivElement | null>(null)
   const fullscreenContainerRef = useRef<HTMLDivElement | null>(null)
   const powerBIServiceRef = useRef<service.Service | null>(null)
+  const embedConfigRequestIdRef = useRef(0)
+  const refreshTimerRef = useRef<number | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
 
   const dashboard = useMemo(
@@ -57,45 +59,68 @@ export const DashboardViewPage = () => {
   )
   const hasAccess = Boolean(dashboard)
 
-  useEffect(() => {
-    if (!dashboard || !hasAccess) return
-    let mounted = true
+  const clearRefreshTimer = useCallback(() => {
+    if (refreshTimerRef.current !== null) {
+      window.clearTimeout(refreshTimerRef.current)
+      refreshTimerRef.current = null
+    }
+  }, [])
 
-    const loadEmbedConfig = async () => {
-      setEmbedState('loading')
+  const loadEmbedConfig = useCallback(
+    async ({
+      background = false,
+      showSuccessToast = false,
+    }: {
+      background?: boolean
+      showSuccessToast?: boolean
+    } = {}) => {
+      if (!dashboard) return null
+
+      const requestId = ++embedConfigRequestIdRef.current
+      if (!background) {
+        setEmbedState('loading')
+      }
+
       try {
         const config = await platformApi.getDashboardEmbedConfig(dashboard.id)
-        if (!mounted) return
+        if (requestId !== embedConfigRequestIdRef.current) return null
         setEmbedConfig(config)
         setEmbedState('ready')
+        if (showSuccessToast) {
+          toast.success('Token de embed atualizado com sucesso.')
+        }
+        return config
       } catch (error) {
-        if (!mounted) return
-        setEmbedConfig(null)
-        setEmbedState('error')
+        if (requestId !== embedConfigRequestIdRef.current) return null
+        if (!background) {
+          setEmbedConfig(null)
+          setEmbedState('error')
+        }
         toast.error(error instanceof Error ? error.message : 'Falha ao carregar configuracao de embed.')
+        return null
       }
+    },
+    [dashboard],
+  )
+
+  useEffect(() => {
+    if (!dashboard || !hasAccess) {
+      embedConfigRequestIdRef.current += 1
+      clearRefreshTimer()
+      setEmbedConfig(null)
+      return
     }
 
     void loadEmbedConfig()
 
     return () => {
-      mounted = false
+      embedConfigRequestIdRef.current += 1
+      clearRefreshTimer()
     }
-  }, [dashboard, hasAccess])
+  }, [clearRefreshTimer, dashboard, hasAccess, loadEmbedConfig])
 
   const handleRefreshToken = async () => {
-    if (!dashboard) return
-    setEmbedState('loading')
-    try {
-      const config = await platformApi.getDashboardEmbedConfig(dashboard.id)
-      setEmbedConfig(config)
-      setEmbedState('ready')
-      toast.success('Token de embed atualizado com sucesso.')
-    } catch (error) {
-      setEmbedConfig(null)
-      setEmbedState('error')
-      toast.error(error instanceof Error ? error.message : 'Falha ao atualizar token de embed.')
-    }
+    await loadEmbedConfig({ showSuccessToast: true })
   }
 
   const handleFullScreen = () => {
@@ -118,6 +143,23 @@ export const DashboardViewPage = () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange)
     }
   }, [])
+
+  useEffect(() => {
+    clearRefreshTimer()
+    if (!dashboard || !embedConfig?.expiresAt) return
+
+    const expiresAtMs = new Date(embedConfig.expiresAt).getTime()
+    if (Number.isNaN(expiresAtMs)) return
+
+    const delayMs = Math.max(expiresAtMs - Date.now() - 60_000, 5_000)
+    refreshTimerRef.current = window.setTimeout(() => {
+      void loadEmbedConfig({ background: true })
+    }, delayMs)
+
+    return () => {
+      clearRefreshTimer()
+    }
+  }, [clearRefreshTimer, dashboard, embedConfig?.expiresAt, loadEmbedConfig])
 
   useEffect(() => {
     if (embedState !== 'ready' || !embedConfig || !embedHostRef.current) return
@@ -202,26 +244,6 @@ export const DashboardViewPage = () => {
             <CardTitle>Nenhum dashboard disponivel</CardTitle>
             <CardDescription>Cadastre um dashboard na tela de gestao para visualizar embed.</CardDescription>
           </CardHeader>
-        </Card>
-      </section>
-    )
-  }
-
-  if (!hasAccess) {
-    return (
-      <section className="animate-fade-in">
-        <Card>
-          <CardHeader>
-            <CardTitle>Acesso negado ao dashboard</CardTitle>
-            <CardDescription>
-              Este dashboard pertence ao tenant {dashboard.tenantName} e nao esta autorizado para sua conta.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button asChild>
-              <Link to="/dashboards">Voltar para lista de dashboards</Link>
-            </Button>
-          </CardContent>
         </Card>
       </section>
     )

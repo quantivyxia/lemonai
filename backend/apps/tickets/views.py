@@ -10,7 +10,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.common.services import get_actor_user, is_analyst, is_super_admin
+from apps.common.services import get_actor_user, get_effective_user, is_analyst, is_super_admin
 from apps.tickets.models import Ticket, TicketAttachment, TicketComment, TicketNotification, TicketPriority, TicketStatus
 from apps.tickets.permissions import TicketNotificationPermission, TicketPermission, can_access_ticket
 from apps.tickets.serializers import TicketAttachmentSerializer, TicketCommentSerializer, TicketNotificationSerializer, TicketSerializer
@@ -30,7 +30,7 @@ class TicketViewSet(viewsets.ModelViewSet):
     ordering = ['-last_activity_at']
 
     def get_queryset(self):
-        actor = get_actor_user(self.request)
+        effective_user = get_effective_user(self.request)
         comment_qs = TicketComment.objects.select_related('author').order_by('created_at')
         attachment_qs = TicketAttachment.objects.select_related('uploaded_by').only(
             'id', 'ticket_id', 'uploaded_by_id', 'file_name', 'content_type', 'size_bytes', 'created_at'
@@ -40,8 +40,8 @@ class TicketViewSet(viewsets.ModelViewSet):
             Prefetch('attachments', queryset=attachment_qs, to_attr='prefetched_attachments'),
         )
 
-        if not is_super_admin(actor):
-            queryset = queryset.filter(requester=actor)
+        if not is_super_admin(effective_user):
+            queryset = queryset.filter(requester=effective_user)
 
         tenant_id = self.request.query_params.get('tenant')
         status_filter = self.request.query_params.get('status')
@@ -49,13 +49,13 @@ class TicketViewSet(viewsets.ModelViewSet):
         requester = self.request.query_params.get('requester')
         search = self.request.query_params.get('search', '').strip()
 
-        if is_super_admin(actor) and tenant_id and tenant_id != 'all':
+        if is_super_admin(effective_user) and tenant_id and tenant_id != 'all':
             queryset = queryset.filter(tenant_id=tenant_id)
         if status_filter and status_filter != 'all':
             queryset = queryset.filter(status=status_filter)
         if priority and priority != 'all':
             queryset = queryset.filter(priority=priority)
-        if is_super_admin(actor) and requester and requester != 'all':
+        if is_super_admin(effective_user) and requester and requester != 'all':
             queryset = queryset.filter(requester_id=requester)
         if search:
             queryset = queryset.filter(
@@ -166,9 +166,9 @@ class TicketNotificationListView(APIView):
     permission_classes = [TicketNotificationPermission]
 
     def get(self, request):
-        actor = get_actor_user(request)
-        notifications = TicketNotification.objects.select_related('ticket', 'actor').filter(recipient=actor)[:10]
-        unread_count = TicketNotification.objects.filter(recipient=actor, is_read=False).count()
+        effective_user = get_effective_user(request)
+        notifications = TicketNotification.objects.select_related('ticket', 'actor').filter(recipient=effective_user)[:10]
+        unread_count = TicketNotification.objects.filter(recipient=effective_user, is_read=False).count()
         return Response({
             'unread_count': unread_count,
             'results': TicketNotificationSerializer(notifications, many=True, context={'request': request}).data,
@@ -208,8 +208,8 @@ class TicketAttachmentDownloadView(APIView):
         if not attachment:
             return Response({'detail': 'Evidencia nao encontrada.'}, status=status.HTTP_404_NOT_FOUND)
 
-        actor = get_actor_user(request)
-        if not can_access_ticket(actor, attachment.ticket):
+        effective_user = get_effective_user(request)
+        if not can_access_ticket(effective_user, attachment.ticket):
             return Response({'detail': 'Voce nao tem acesso a esta evidencia.'}, status=status.HTTP_403_FORBIDDEN)
 
         buffer = BytesIO(attachment.file_data)

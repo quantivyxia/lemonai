@@ -8,13 +8,14 @@ import { Topbar } from '@/components/layout/topbar'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/hooks/use-auth'
 import { usePlatformStore } from '@/hooks/use-platform-store'
+import { AppAssistant } from '@/features/reports/components/dashboard-assistant'
 
 export const AppShell = () => {
   const { actorUser, isViewAsMode, stopViewAs, user } = useAuth()
   const { brandings, loadError } = usePlatformStore()
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const { pathname } = useLocation()
-  const isDashboardViewRoute = /^\/dashboards\/[^/]+$/.test(pathname)
+  const isDashboardViewRoute = /^\/reports\/[^/]+$/.test(pathname)
   const tenantPortalName = useMemo(
     () => brandings.find((item) => item.tenantId === user?.tenantId)?.platformName?.trim(),
     [brandings, user?.tenantId],
@@ -68,6 +69,8 @@ export const AppShell = () => {
           </main>
         </div>
       </div>
+
+      <AppAssistant />
 
       <AnimatePresence>
         {isMobileSidebarOpen ? (

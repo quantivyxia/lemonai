@@ -1,6 +1,6 @@
 from rest_framework.permissions import BasePermission
 
-from apps.common.services import get_actor_user, is_analyst, is_super_admin
+from apps.common.services import get_actor_user, get_effective_user, is_analyst, is_super_admin
 
 
 def can_access_ticket(user, ticket) -> bool:
@@ -15,19 +15,20 @@ def can_access_ticket(user, ticket) -> bool:
 
 class TicketPermission(BasePermission):
     def has_permission(self, request, view):
-        user = get_actor_user(request)
+        user = get_effective_user(request)
         if not (user and user.is_authenticated):
             return False
         return is_super_admin(user) or is_analyst(user)
 
     def has_object_permission(self, request, view, obj):
-        user = get_actor_user(request)
+        effective_user = get_effective_user(request)
+        actor_user = get_actor_user(request)
         if request.method == 'DELETE':
-            return bool(user and user.is_authenticated and is_super_admin(user))
-        return can_access_ticket(user, obj)
+            return bool(actor_user and actor_user.is_authenticated and is_super_admin(actor_user))
+        return can_access_ticket(effective_user, obj)
 
 
 class TicketNotificationPermission(BasePermission):
     def has_permission(self, request, view):
-        user = get_actor_user(request)
+        user = get_effective_user(request)
         return bool(user and user.is_authenticated and is_analyst(user))

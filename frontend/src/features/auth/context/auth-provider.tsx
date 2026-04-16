@@ -8,7 +8,6 @@ import type { SessionUser, ViewAsSession } from '@/types/session'
 type LoginInput = {
   email: string
   password: string
-  remember: boolean
 }
 
 type AuthContextValue = {

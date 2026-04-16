@@ -19,4 +19,5 @@ urlpatterns = [
     path('api/tickets/', include('apps.tickets.urls')),
     path('api/branding/', include('apps.branding.urls')),
     path('api/powerbi/', include('apps.powerbi.urls')),
+    path('api/assistant/', include('apps.assistant.urls')),
 ]

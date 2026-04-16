@@ -1,12 +1,14 @@
+from datetime import timedelta
+
 from django.db import connection
-from django.db.models import Count, Prefetch
+from django.db.models import Count, Prefetch, Q
+from django.db.models.functions import TruncDate
 from django.utils import timezone
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.audit.models import AccessLog, SystemEventLog
-from apps.audit.serializers import AccessLogSerializer
 from apps.common.request_context import get_request_id
 from apps.common.services import apply_tenant_scope, is_analyst, is_super_admin, is_viewer
 from apps.dashboards.models import Dashboard, DashboardColumn
@@ -136,7 +138,14 @@ class BootstrapView(APIView):
         return apply_tenant_scope(queryset, user)
 
     def _get_dashboards(self, user):
-        queryset = Dashboard.objects.select_related('tenant', 'workspace').prefetch_related('columns').order_by('name')
+        last_7_days = timezone.now() - timedelta(days=7)
+        queryset = Dashboard.objects.select_related('tenant', 'workspace').annotate(
+            views_7d=Count(
+                'access_logs',
+                filter=Q(access_logs__status='success', access_logs__accessed_at__gte=last_7_days),
+                distinct=True,
+            ),
+        ).order_by('name')
         queryset = apply_tenant_scope(queryset, user)
         if is_super_admin(user):
             return queryset
@@ -152,22 +161,25 @@ class BootstrapView(APIView):
         queryset = DashboardColumn.objects.select_related('dashboard', 'dashboard__tenant').order_by('label')
         if is_super_admin(user):
             return queryset
-        return queryset.filter(dashboard__tenant_id=user.tenant_id)
+        queryset = queryset.filter(dashboard__tenant_id=user.tenant_id)
+        accessible_ids = get_user_accessible_dashboard_ids(user)
+        if accessible_ids is None:
+            return queryset
+        if not accessible_ids:
+            return queryset.none()
+        return queryset.filter(dashboard_id__in=accessible_ids)
 
     def _get_groups(self, user):
-        queryset = UserGroup.objects.select_related('tenant').prefetch_related('members', 'dashboards').order_by('name')
+        queryset = UserGroup.objects.select_related('tenant').annotate(
+            members_count=Count('members', distinct=True),
+            dashboards_count=Count('dashboards', distinct=True),
+        ).prefetch_related(
+            Prefetch('members', queryset=User.objects.only('id', 'first_name', 'last_name').order_by('first_name', 'last_name')),
+            Prefetch('dashboards', queryset=Dashboard.objects.only('id', 'name').order_by('name')),
+        ).order_by('name')
         queryset = apply_tenant_scope(queryset, user)
         if is_viewer(user):
             return queryset.filter(members=user)
-        return queryset
-
-    def _get_access_logs(self, user):
-        if not self._can_read_admin_data(user):
-            return AccessLog.objects.none()
-        queryset = AccessLog.objects.select_related('user', 'tenant', 'dashboard').order_by('-accessed_at')
-        queryset = apply_tenant_scope(queryset, user)
-        if is_viewer(user):
-            return queryset.none()
         return queryset
 
     def _get_brandings(self, user):
@@ -193,13 +205,83 @@ class BootstrapView(APIView):
             'users': UserSerializer(self._get_users(user), many=True, context={'request': request}).data,
             'workspaces': WorkspaceSerializer(self._get_workspaces(user), many=True, context={'request': request}).data,
             'dashboards': DashboardSerializer(self._get_dashboards(user), many=True, context={'request': request}).data,
-            'dashboard_columns': DashboardColumnSerializer(
-                self._get_dashboard_columns(user), many=True, context={'request': request}
-            ).data,
             'groups': UserGroupSerializer(self._get_groups(user), many=True, context={'request': request}).data,
-            'access_logs': AccessLogSerializer(self._get_access_logs(user), many=True, context={'request': request}).data,
             'brandings': ClientBrandingSerializer(self._get_brandings(user), many=True, context={'request': request}).data,
             'rls_rules': RLSRuleSerializer(self._get_rls_rules(user), many=True, context={'request': request}).data,
             'roles': RoleSerializer(self._get_roles(user), many=True, context={'request': request}).data,
+        }
+        return Response(payload)
+
+
+class DashboardHomeInsightsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def _get_access_logs_queryset(self, user):
+        queryset = AccessLog.objects.select_related('user', 'tenant', 'dashboard').filter(status='success')
+        queryset = apply_tenant_scope(queryset, user)
+        if is_viewer(user):
+            queryset = queryset.filter(user=user)
+        return queryset
+
+    def _get_system_events_queryset(self, user):
+        if is_viewer(user):
+            return SystemEventLog.objects.none()
+        queryset = SystemEventLog.objects.select_related('user', 'tenant').order_by('-created_at')
+        return apply_tenant_scope(queryset, user)
+
+    def _build_access_series(self, user):
+        now = timezone.now()
+        start_date = timezone.localdate(now - timedelta(days=6))
+        series_dates = [
+            start_date + timedelta(days=index)
+            for index in range(7)
+        ]
+        queryset = self._get_access_logs_queryset(user).filter(accessed_at__date__gte=start_date)
+        rows = queryset.annotate(day=TruncDate('accessed_at')).values('day').annotate(accesses=Count('id')).order_by('day')
+        counts_by_date = {row['day']: row['accesses'] for row in rows}
+        return [
+            {
+                'date': day.isoformat(),
+                'accesses': counts_by_date.get(day, 0),
+            }
+            for day in series_dates
+        ]
+
+    def _serialize_access_activity(self, log):
+        return {
+            'id': f'access-{log.id}',
+            'tenantId': str(log.tenant_id),
+            'title': 'Dashboard visualizado',
+            'description': f'{getattr(log.user, "full_name", "") or "Usuario"} abriu {getattr(log.dashboard, "name", "dashboard")}.',
+            'timestamp': log.accessed_at.isoformat(),
+        }
+
+    def _serialize_system_activity(self, event):
+        endpoint = event.endpoint or 'acao interna'
+        action = event.action or 'Evento administrativo'
+        return {
+            'id': f'event-{event.id}',
+            'tenantId': str(event.tenant_id or ''),
+            'title': action,
+            'description': event.message or f'Operacao administrativa executada em {endpoint}.',
+            'timestamp': event.created_at.isoformat(),
+        }
+
+    def _build_recent_activities(self, user):
+        access_logs = list(self._get_access_logs_queryset(user).order_by('-accessed_at')[:8])
+        activities = [self._serialize_access_activity(log) for log in access_logs]
+
+        if not is_viewer(user):
+            system_events = list(self._get_system_events_queryset(user)[:6])
+            activities.extend(self._serialize_system_activity(event) for event in system_events)
+
+        activities.sort(key=lambda item: item['timestamp'], reverse=True)
+        return activities[:10]
+
+    def get(self, request):
+        payload = {
+            'request_id': get_request_id(),
+            'access_series': self._build_access_series(request.user),
+            'activities': self._build_recent_activities(request.user),
         }
         return Response(payload)

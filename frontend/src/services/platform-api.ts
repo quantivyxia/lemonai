@@ -101,6 +101,7 @@ type BackendDashboard = {
   refresh_schedule?: string
   updated_at: string
   tags?: string[]
+  views_7d?: number
 }
 
 type BackendGroup = {
@@ -254,19 +255,42 @@ type DashboardEmbedConfig = {
   }>
 }
 
+export type AssistantChatMessage = {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export type AssistantPageContext = {
+  key: string
+  title: string
+  path: string
+  description?: string
+  isDashboard?: boolean
+}
+
+export type AssistantChatResponse = {
+  reply: string
+  model: string
+  dashboardId?: string | null
+  contextSummary: string
+  requestId: string
+}
+
 type BootstrapPayload = {
   tenants: Tenant[]
   users: User[]
   dashboards: Dashboard[]
   groups: UserGroup[]
-  accessLogs: AccessLog[]
   brandings: TenantBranding[]
   workspaces: Workspace[]
-  dashboardColumns: DashboardColumn[]
   rlsRules: RLSRule[]
+  roleIds: Record<UserRole, string>
+}
+
+export type DashboardHomeInsightsPayload = {
+  requestId: string
   activities: ActivityItem[]
   accessSeries: { date: string; accesses: number }[]
-  roleIds: Record<UserRole, string>
 }
 
 type BackendSystemEventLog = {
@@ -328,12 +352,25 @@ type BackendBootstrapPayload = {
   users: BackendUser[]
   workspaces: BackendWorkspace[]
   dashboards: BackendDashboard[]
-  dashboard_columns: BackendDashboardColumn[]
   groups: BackendGroup[]
-  access_logs: BackendAccessLog[]
   brandings: BackendBranding[]
   rls_rules: BackendRLSRule[]
   roles: BackendRole[]
+}
+
+type BackendDashboardHomeInsightsPayload = {
+  request_id: string
+  access_series: Array<{
+    date: string
+    accesses: number
+  }>
+  activities: Array<{
+    id: string
+    tenantId?: string
+    title: string
+    description: string
+    timestamp: string
+  }>
 }
 
 const buildRoleIds = (rolesRaw: BackendRole[]): Record<UserRole, string> => ({
@@ -347,9 +384,7 @@ const buildBootstrapPayload = (bootstrap: BackendBootstrapPayload): BootstrapPay
   const usersRaw = bootstrap.users
   const workspacesRaw = bootstrap.workspaces
   const dashboardsRaw = bootstrap.dashboards
-  const dashboardColumnsRaw = bootstrap.dashboard_columns
   const groupsRaw = bootstrap.groups
-  const accessLogsRaw = bootstrap.access_logs
   const brandingsRaw = bootstrap.brandings
   const rlsRulesRaw = bootstrap.rls_rules
   const rolesRaw = bootstrap.roles
@@ -416,17 +451,6 @@ const buildBootstrapPayload = (bootstrap: BackendBootstrapPayload): BootstrapPay
   }))
   const workspaceNameById = new Map(workspaces.map((workspace) => [workspace.id, workspace.name]))
 
-  const accessLogs: AccessLog[] = accessLogsRaw.map(mapAccessLog)
-
-  const viewsByDashboardId = accessLogsRaw.reduce<Record<string, number>>((acc, log) => {
-    if (!log.dashboard || log.status !== 'success') return acc
-    const date = new Date(log.accessed_at)
-    const days = (Date.now() - date.getTime()) / (1000 * 60 * 60 * 24)
-    if (days > 7) return acc
-    acc[log.dashboard] = (acc[log.dashboard] ?? 0) + 1
-    return acc
-  }, {})
-
   const dashboards: Dashboard[] = dashboardsRaw.map((dashboard) => ({
     id: dashboard.id,
     tenantId: dashboard.tenant,
@@ -436,7 +460,7 @@ const buildBootstrapPayload = (bootstrap: BackendBootstrapPayload): BootstrapPay
     category: dashboard.category,
     status: dashboard.status,
     updatedAt: dashboard.updated_at,
-    views7d: viewsByDashboardId[dashboard.id] ?? 0,
+    views7d: dashboard.views_7d ?? 0,
     description: dashboard.description,
     workspaceId: dashboard.workspace,
     reportId: dashboard.report_id,
@@ -462,15 +486,6 @@ const buildBootstrapPayload = (bootstrap: BackendBootstrapPayload): BootstrapPay
       group.dashboard_names && group.dashboard_names.length > 0
         ? group.dashboard_names
         : group.dashboards.map((dashboardId) => dashboardNameById.get(dashboardId) ?? dashboardId),
-  }))
-
-  const dashboardColumns: DashboardColumn[] = dashboardColumnsRaw.map((column) => ({
-    id: column.id,
-    dashboardId: column.dashboard,
-    name: column.name,
-    label: column.label,
-    dataType: 'string',
-    values: column.values ?? [],
   }))
 
   const rlsRules: RLSRule[] = rlsRulesRaw.map((rule) => ({
@@ -511,13 +526,9 @@ const buildBootstrapPayload = (bootstrap: BackendBootstrapPayload): BootstrapPay
     users,
     dashboards,
     groups,
-    accessLogs,
     brandings,
     workspaces,
-    dashboardColumns,
     rlsRules,
-    activities: buildActivities(accessLogs, dashboards),
-    accessSeries: buildAccessSeries(accessLogs),
     roleIds: buildRoleIds(rolesRaw),
   }
 }
@@ -571,68 +582,19 @@ type BackendAuditInsights = {
   access_logs: BackendAccessLog[]
 }
 
-const optionalList = async <T>(path: string): Promise<T[]> => {
+const optionalList = async <T>(path: string, options?: { critical?: boolean }): Promise<T[]> => {
   try {
     return await apiList<T>(path)
   } catch (error) {
+    if (options?.critical) {
+      throw error
+    }
     appLogger.warn('Falha ao carregar recurso opcional', {
       path,
       error: error instanceof Error ? error.message : 'unknown',
     })
     return []
   }
-}
-
-const toISODateKey = (value: string) => {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return null
-  return date.toISOString().slice(0, 10)
-}
-
-const buildAccessSeries = (logs: AccessLog[]) => {
-  const now = new Date()
-  const dates = Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(now)
-    date.setDate(now.getDate() - (6 - index))
-    return date.toISOString().slice(0, 10)
-  })
-
-  const byDate = logs.reduce<Record<string, number>>((acc, log) => {
-    const key = toISODateKey(log.accessedAt)
-    if (!key) return acc
-    acc[key] = (acc[key] ?? 0) + 1
-    return acc
-  }, {})
-
-  return dates.map((date) => ({
-    date,
-    accesses: byDate[date] ?? 0,
-  }))
-}
-
-const buildActivities = (logs: AccessLog[], dashboards: Dashboard[]): ActivityItem[] => {
-  if (logs.length > 0) {
-    return logs.slice(0, 10).map((log) => ({
-      id: log.id,
-      tenantId: log.tenantId,
-      title:
-        log.status === 'success'
-          ? 'Dashboard visualizado'
-          : log.status === 'denied'
-            ? 'Acesso negado'
-            : 'Erro em visualizacao',
-      description: `${log.userName} - ${log.dashboardName} (${log.origin.toUpperCase()})`,
-      timestamp: log.accessedAt,
-    }))
-  }
-
-  return dashboards.slice(0, 8).map((dashboard) => ({
-    id: `dashboard-${dashboard.id}`,
-    tenantId: dashboard.tenantId,
-    title: 'Dashboard atualizado',
-    description: `${dashboard.name} em ${dashboard.tenantName}`,
-    timestamp: dashboard.updatedAt,
-  }))
 }
 
 const normalizeTenantStatus = (status: BackendTenant['status']): Tenant['status'] =>
@@ -728,7 +690,7 @@ const mapDashboard = (dashboard: BackendDashboard, currentById?: Map<string, Das
   category: dashboard.category,
   status: dashboard.status,
   updatedAt: dashboard.updated_at,
-  views7d: currentById?.get(dashboard.id)?.views7d ?? 0,
+  views7d: dashboard.views_7d ?? currentById?.get(dashboard.id)?.views7d ?? 0,
   description: dashboard.description,
   workspaceId: dashboard.workspace,
   reportId: dashboard.report_id,
@@ -867,6 +829,18 @@ export const platformApi = {
     return payload.map((dashboard) => mapDashboard(dashboard, currentById))
   },
 
+  async fetchDashboardColumns(): Promise<DashboardColumn[]> {
+    const payload = await apiList<BackendDashboardColumn>('/dashboards/columns/')
+    return payload.map((column) => ({
+      id: column.id,
+      dashboardId: column.dashboard,
+      name: column.name,
+      label: column.label,
+      dataType: 'string',
+      values: column.values ?? [],
+    }))
+  },
+
   async fetchGroups(options?: { users?: User[]; dashboards?: Dashboard[]; tenants?: Tenant[] }): Promise<UserGroup[]> {
     const payload = await optionalList<BackendGroup>('/users/groups/')
     const userNameById = new Map((options?.users ?? []).map((user) => [user.id, `${user.firstName} ${user.lastName}`]))
@@ -897,29 +871,17 @@ export const platformApi = {
   },
 
   async fetchBootstrapFallback(options?: { userRole?: UserRole }): Promise<BootstrapPayload> {
-    void options
-    const [
-      brandings,
-      tenants,
-      users,
-      workspaces,
-      dashboards,
-      dashboardColumns,
-      groups,
-      accessLogs,
-      rlsRules,
-      roles,
-    ] = await Promise.all([
+    const canReadAdminData = options?.userRole === 'super_admin' || options?.userRole === 'analyst'
+
+    const [brandings, tenants, users, workspaces, dashboards, groups, rlsRules, roles] = await Promise.all([
       optionalList<BackendBranding>('/branding/'),
-      optionalList<BackendTenant>('/tenants/'),
-      optionalList<BackendUser>('/users/'),
-      optionalList<BackendWorkspace>('/workspaces/'),
-      optionalList<BackendDashboard>('/dashboards/'),
-      optionalList<BackendDashboardColumn>('/dashboards/columns/'),
-      optionalList<BackendGroup>('/users/groups/'),
-      optionalList<BackendAccessLog>('/audit/logs/'),
-      optionalList<BackendRLSRule>('/permissions/rls-rules/'),
-      optionalList<BackendRole>('/permissions/roles/'),
+      optionalList<BackendTenant>('/tenants/', { critical: canReadAdminData }),
+      optionalList<BackendUser>('/users/', { critical: canReadAdminData }),
+      optionalList<BackendWorkspace>('/workspaces/', { critical: true }),
+      optionalList<BackendDashboard>('/dashboards/', { critical: true }),
+      optionalList<BackendGroup>('/users/groups/', { critical: canReadAdminData }),
+      optionalList<BackendRLSRule>('/permissions/rls-rules/', { critical: canReadAdminData }),
+      optionalList<BackendRole>('/permissions/roles/', { critical: canReadAdminData }),
     ])
 
     appLogger.warn('Bootstrap carregado via fallback por recursos individuais', {
@@ -935,13 +897,29 @@ export const platformApi = {
       users,
       workspaces,
       dashboards,
-      dashboard_columns: dashboardColumns,
       groups,
-      access_logs: accessLogs,
       brandings,
       rls_rules: rlsRules,
       roles,
     })
+  },
+
+  async getDashboardHomeInsights(): Promise<DashboardHomeInsightsPayload> {
+    const payload = await apiRequest<BackendDashboardHomeInsightsPayload>('/health/dashboard-home/')
+    return {
+      requestId: payload.request_id,
+      activities: payload.activities.map((activity) => ({
+        id: activity.id,
+        tenantId: activity.tenantId,
+        title: activity.title,
+        description: activity.description,
+        timestamp: activity.timestamp,
+      })),
+      accessSeries: payload.access_series.map((point) => ({
+        date: point.date,
+        accesses: point.accesses,
+      })),
+    }
   },
 
   upsertTenant(payload: Record<string, unknown> & { id?: string }) {
@@ -1084,6 +1062,29 @@ export const platformApi = {
 
   getDashboardEmbedConfig(dashboardId: string) {
     return apiRequest<DashboardEmbedConfig>(`/dashboards/${dashboardId}/embed-config/`)
+  },
+
+  assistantChat(payload: {
+    dashboardId?: string
+    pageContext?: AssistantPageContext
+    messages: AssistantChatMessage[]
+  }) {
+    return apiRequest<AssistantChatResponse>('/assistant/chat/', {
+      method: 'POST',
+      body: JSON.stringify({
+        dashboard_id: payload.dashboardId,
+        page_context: payload.pageContext
+          ? {
+              key: payload.pageContext.key,
+              title: payload.pageContext.title,
+              path: payload.pageContext.path,
+              description: payload.pageContext.description,
+              is_dashboard: payload.pageContext.isDashboard ?? false,
+            }
+          : undefined,
+        messages: payload.messages,
+      }),
+    })
   },
 
   async listPowerBIConnections() {

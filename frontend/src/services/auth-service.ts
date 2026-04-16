@@ -5,7 +5,6 @@ import type { SessionUser } from '@/types/session'
 type LoginInput = {
   email: string
   password: string
-  remember: boolean
 }
 
 type BackendAuthUser = {
@@ -67,16 +66,13 @@ export const authService = {
       { auth: false, retryOnAuthError: false },
     )
 
-    sessionStorageService.setTokens(
-      {
-        access: payload.access,
-        refresh: payload.refresh,
-      },
-      input.remember,
-    )
+    sessionStorageService.setTokens({
+      access: payload.access,
+      refresh: payload.refresh,
+    })
 
     const session = mapBackendUserToSession(payload.user)
-    sessionStorageService.setSession(session, input.remember)
+    sessionStorageService.setSession(session)
     return session
   },
 

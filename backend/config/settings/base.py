@@ -84,6 +84,7 @@ INSTALLED_APPS = [
     'apps.tickets',
     'apps.branding',
     'apps.powerbi',
+    'apps.assistant',
 ]
 
 MIDDLEWARE = [
@@ -216,6 +217,7 @@ REST_FRAMEWORK = {
         'anon': os.getenv('DRF_THROTTLE_ANON', '60/minute'),
         'user': os.getenv('DRF_THROTTLE_USER', '300/minute'),
         'login': os.getenv('DRF_THROTTLE_LOGIN', '10/minute'),
+        'assistant': os.getenv('DRF_THROTTLE_ASSISTANT', '30/minute'),
     },
     'EXCEPTION_HANDLER': 'apps.common.exceptions.api_exception_handler',
 }

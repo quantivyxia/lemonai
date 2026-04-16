@@ -6,8 +6,6 @@ import { permissionMatrixMock } from '@/mocks/platform'
 import { defaultPlatformSettings } from '@/mocks/settings'
 import { platformApi } from '@/services/platform-api'
 import type {
-  AccessLog,
-  ActivityItem,
   Dashboard,
   DashboardColumn,
   PermissionMatrixRow,
@@ -28,16 +26,14 @@ type PlatformStoreValue = {
   users: User[]
   dashboards: Dashboard[]
   groups: UserGroup[]
-  accessLogs: AccessLog[]
   brandings: TenantBranding[]
   workspaces: Workspace[]
   dashboardColumns: DashboardColumn[]
   rlsRules: RLSRule[]
   permissionMatrix: PermissionMatrixRow[]
-  activities: ActivityItem[]
-  accessSeries: { date: string; accesses: number }[]
   settings: PlatformSettings
   reloadData: () => Promise<void>
+  reloadDashboardColumns: () => Promise<void>
   upsertTenant: (
     tenant: Omit<
       Tenant,
@@ -80,14 +76,11 @@ type PersistedState = {
   users: User[]
   dashboards: Dashboard[]
   groups: UserGroup[]
-  accessLogs: AccessLog[]
   brandings: TenantBranding[]
   workspaces: Workspace[]
   dashboardColumns: DashboardColumn[]
   rlsRules: RLSRule[]
   permissionMatrix: PermissionMatrixRow[]
-  activities: ActivityItem[]
-  accessSeries: { date: string; accesses: number }[]
   settings: PlatformSettings
 }
 
@@ -96,14 +89,11 @@ const initialState: PersistedState = {
   users: [],
   dashboards: [],
   groups: [],
-  accessLogs: [],
   brandings: [],
   workspaces: [],
   dashboardColumns: [],
   rlsRules: [],
   permissionMatrix: permissionMatrixMock,
-  activities: [],
-  accessSeries: [],
   settings: defaultPlatformSettings,
 }
 
@@ -146,6 +136,9 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
         if (!isRecoverableBootstrapError(message)) {
           throw firstError
         }
+        if (user?.role === 'viewer') {
+          throw firstError
+        }
         return await platformApi.fetchBootstrapFallback({ userRole: user?.role })
       }
     }
@@ -177,13 +170,9 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
         users: data.users,
         dashboards: data.dashboards,
         groups: data.groups,
-        accessLogs: data.accessLogs,
         brandings: data.brandings,
         workspaces: data.workspaces,
-        dashboardColumns: data.dashboardColumns,
         rlsRules: data.rlsRules,
-        activities: data.activities,
-        accessSeries: data.accessSeries,
       }))
       setRoleIds(data.roleIds)
     } catch (error) {
@@ -257,6 +246,16 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
 
     const rlsRules = await platformApi.fetchRLSRules()
     setState((current) => ({ ...current, rlsRules }))
+  }, [isAuthenticated, user?.role])
+
+  const reloadDashboardColumns = useCallback(async () => {
+    if (!isAuthenticated || (user?.role !== 'super_admin' && user?.role !== 'analyst')) {
+      setState((current) => ({ ...current, dashboardColumns: [] }))
+      return
+    }
+
+    const dashboardColumns = await platformApi.fetchDashboardColumns()
+    setState((current) => ({ ...current, dashboardColumns }))
   }, [isAuthenticated, user?.role])
 
   useEffect(() => {
@@ -524,16 +523,14 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
       users: state.users,
       dashboards: state.dashboards,
       groups: state.groups,
-      accessLogs: state.accessLogs,
       brandings: state.brandings,
       workspaces: state.workspaces,
       dashboardColumns: state.dashboardColumns,
       rlsRules: state.rlsRules,
       permissionMatrix: state.permissionMatrix,
-      activities: state.activities,
-      accessSeries: state.accessSeries,
       settings: state.settings,
       reloadData,
+      reloadDashboardColumns,
       upsertTenant,
       deleteTenant,
       upsertUser,
@@ -557,9 +554,6 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
       isLoading,
       loadError,
       reloadData,
-      state.accessLogs,
-      state.accessSeries,
-      state.activities,
       state.brandings,
       state.dashboardColumns,
       state.dashboards,
@@ -570,6 +564,7 @@ export const PlatformStoreProvider = ({ children }: { children: React.ReactNode 
       state.tenants,
       state.users,
       state.workspaces,
+      reloadDashboardColumns,
       upsertTenant,
       deleteTenant,
       upsertUser,

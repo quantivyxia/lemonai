@@ -40,10 +40,10 @@ class UserGroupSerializer(serializers.ModelSerializer):
         }
 
     def get_members_count(self, obj):
-        return len(obj.members.all())
+        return getattr(obj, 'members_count', obj.members.count())
 
     def get_dashboards_count(self, obj):
-        return len(obj.dashboards.all())
+        return getattr(obj, 'dashboards_count', obj.dashboards.count())
 
     def get_member_names(self, obj):
         return [member.full_name for member in obj.members.all()]

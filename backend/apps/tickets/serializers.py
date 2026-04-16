@@ -3,7 +3,7 @@ from __future__ import annotations
 from django.urls import reverse
 from rest_framework import serializers
 
-from apps.common.services import get_actor_user, is_super_admin
+from apps.common.services import get_actor_user, get_effective_user, is_super_admin
 from apps.tickets.models import Ticket, TicketAttachment, TicketComment, TicketNotification, TicketPriority, TicketStatus
 
 
@@ -127,11 +127,11 @@ class TicketSerializer(serializers.ModelSerializer):
 
     def get_comments(self, obj):
         request = self.context.get('request')
-        actor = get_actor_user(request)
+        effective_user = get_effective_user(request)
         comments = getattr(obj, 'prefetched_comments', None)
         if comments is None:
             comments = obj.comments.select_related('author').all()
-        if not is_super_admin(actor):
+        if not is_super_admin(effective_user):
             comments = [item for item in comments if not item.is_internal]
         return TicketCommentSerializer(comments, many=True, context=self.context).data
 
@@ -143,11 +143,11 @@ class TicketSerializer(serializers.ModelSerializer):
 
     def get_comments_count(self, obj):
         request = self.context.get('request')
-        actor = get_actor_user(request)
+        effective_user = get_effective_user(request)
         comments = getattr(obj, 'prefetched_comments', None)
         if comments is None:
             comments = obj.comments.select_related('author').all()
-        if not is_super_admin(actor):
+        if not is_super_admin(effective_user):
             comments = [item for item in comments if not item.is_internal]
         return len(comments)
 

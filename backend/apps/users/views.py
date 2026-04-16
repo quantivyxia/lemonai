@@ -1,4 +1,4 @@
-from django.db.models import Prefetch
+from django.db.models import Count, Prefetch
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -77,7 +77,13 @@ class UserGroupViewSet(viewsets.ModelViewSet):
     ordering = ['name']
 
     def get_queryset(self):
-        queryset = UserGroup.objects.select_related('tenant').prefetch_related('members', 'dashboards')
+        queryset = UserGroup.objects.select_related('tenant').annotate(
+            members_count=Count('members', distinct=True),
+            dashboards_count=Count('dashboards', distinct=True),
+        ).prefetch_related(
+            Prefetch('members', queryset=User.objects.only('id', 'first_name', 'last_name').order_by('first_name', 'last_name')),
+            Prefetch('dashboards', queryset=Dashboard.objects.only('id', 'name').order_by('name')),
+        )
         queryset = apply_tenant_scope(queryset, self.request.user)
 
         if is_viewer(self.request.user):
