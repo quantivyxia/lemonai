@@ -8,7 +8,6 @@ import { Topbar } from '@/components/layout/topbar'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/hooks/use-auth'
 import { usePlatformStore } from '@/hooks/use-platform-store'
-import { AppAssistant } from '@/features/reports/components/dashboard-assistant'
 
 export const AppShell = () => {
   const { actorUser, isViewAsMode, stopViewAs, user } = useAuth()
@@ -69,9 +68,6 @@ export const AppShell = () => {
           </main>
         </div>
       </div>
-
-      <AppAssistant />
-
       <AnimatePresence>
         {isMobileSidebarOpen ? (
           <motion.div
