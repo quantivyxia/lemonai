@@ -18,6 +18,13 @@ from apps.common.services import get_effective_user
 logger = logging.getLogger('insighthub.api')
 
 
+def safe_create_system_event(**kwargs):
+    try:
+        create_system_event(**kwargs)
+    except Exception:  # noqa: BLE001
+        logger.exception('Failed to persist assistant system event')
+
+
 class AssistantChatView(APIView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = 'assistant'
@@ -40,7 +47,7 @@ class AssistantChatView(APIView):
                 messages=messages,
             )
         except AssistantConfigurationError as exc:
-            create_system_event(
+            safe_create_system_event(
                 level='warn',
                 category='integration',
                 action='assistant.chat.config_error',
@@ -63,7 +70,7 @@ class AssistantChatView(APIView):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
         except AssistantIntegrationError as exc:
-            create_system_event(
+            safe_create_system_event(
                 level='error',
                 category='integration',
                 action='assistant.chat.failed',
@@ -83,8 +90,36 @@ class AssistantChatView(APIView):
                 },
             )
             return Response({'detail': str(exc), 'request_id': get_request_id()}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception('Unexpected assistant error')
+            safe_create_system_event(
+                level='error',
+                category='system',
+                action='assistant.chat.unhandled_error',
+                message='Erro interno nao tratado no assistente IA.',
+                request=request,
+                user=effective_user,
+                tenant=getattr(effective_user, 'tenant', None),
+                resource_type='assistant_chat',
+                resource_id=str(dashboard_id or ''),
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                metadata={
+                    'dashboard_id': str(dashboard_id or ''),
+                    'page_key': page_context.get('key', ''),
+                    'page_path': page_context.get('path', ''),
+                    'message_count': len(messages),
+                    'exception_type': exc.__class__.__name__,
+                },
+            )
+            return Response(
+                {
+                    'detail': 'Falha interna ao processar o assistente no servidor.',
+                    'request_id': get_request_id(),
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
-        create_system_event(
+        safe_create_system_event(
             level='info',
             category='integration',
             action='assistant.chat.success',
