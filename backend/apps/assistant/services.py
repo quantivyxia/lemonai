@@ -100,10 +100,17 @@ class AssistantReply:
 
 
 class OpenAIChatClient:
+    MODEL_ALIASES = {
+        'gpt-5.4-mini': 'gpt-5-mini',
+        'gpt-5.4-nano': 'gpt-5-nano',
+        'gpt-5.4': 'gpt-5',
+    }
+
     def __init__(self):
         self.enabled = os.getenv('OPENAI_ASSISTANT_ENABLED', 'true').strip().lower() in {'1', 'true', 'yes', 'on'}
         self.api_key = os.getenv('OPENAI_API_KEY', '').strip()
-        self.model = os.getenv('OPENAI_MODEL', 'gpt-5.4-mini').strip() or 'gpt-5.4-mini'
+        configured_model = os.getenv('OPENAI_MODEL', 'gpt-5-mini').strip() or 'gpt-5-mini'
+        self.model = self.MODEL_ALIASES.get(configured_model, configured_model)
         self.api_base_url = os.getenv('OPENAI_API_BASE_URL', 'https://api.openai.com/v1').strip().rstrip('/')
         self.timeout_seconds = int(os.getenv('OPENAI_TIMEOUT_SECONDS', '30'))
 
@@ -113,19 +120,42 @@ class OpenAIChatClient:
         if not self.api_key:
             raise AssistantConfigurationError('OpenAI nao configurada. Defina OPENAI_API_KEY no backend.')
 
-        response = requests.post(
-            f'{self.api_base_url}/chat/completions',
-            headers={
-                'Authorization': f'Bearer {self.api_key}',
-                'Content-Type': 'application/json',
-            },
-            json={
-                'model': self.model,
-                'temperature': 0.2,
-                'messages': messages,
-            },
-            timeout=self.timeout_seconds,
-        )
+        try:
+            response = requests.post(
+                f'{self.api_base_url}/chat/completions',
+                headers={
+                    'Authorization': f'Bearer {self.api_key}',
+                    'Content-Type': 'application/json',
+                },
+                json={
+                    'model': self.model,
+                    'temperature': 0.2,
+                    'messages': messages,
+                },
+                timeout=self.timeout_seconds,
+            )
+        except requests.exceptions.Timeout as exc:
+            logger.warning(
+                'OpenAI request timed out',
+                extra={
+                    'model': self.model,
+                    'timeout_seconds': self.timeout_seconds,
+                },
+            )
+            raise AssistantIntegrationError(
+                'A chamada para a OpenAI excedeu o tempo limite configurado no servidor.'
+            ) from exc
+        except requests.exceptions.RequestException as exc:
+            logger.exception(
+                'OpenAI request failed',
+                extra={
+                    'model': self.model,
+                    'api_base_url': self.api_base_url,
+                },
+            )
+            raise AssistantIntegrationError(
+                'Falha ao conectar com a OpenAI a partir do servidor.'
+            ) from exc
         if response.status_code >= 400:
             raise AssistantIntegrationError(self._parse_error(response))
 
