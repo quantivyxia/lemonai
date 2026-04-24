@@ -24,6 +24,13 @@ def _response(detail: str, *, status_code: int, errors=None):
     return Response(payload, status=status_code)
 
 
+def _safe_create_system_event(**kwargs):
+    try:
+        create_system_event(**kwargs)
+    except Exception:  # noqa: BLE001
+        logger.exception('Failed to persist API exception system event')
+
+
 def api_exception_handler(exc, context):
     request = context.get('request')
     response = drf_exception_handler(exc, context)
@@ -39,7 +46,7 @@ def api_exception_handler(exc, context):
 
     if response is None:
         logger.exception('Unhandled API exception', extra=log_extra)
-        create_system_event(
+        _safe_create_system_event(
             level='error',
             category='system',
             action='api.unhandled_exception',
@@ -58,7 +65,7 @@ def api_exception_handler(exc, context):
 
     if isinstance(exc, (AuthenticationFailed, NotAuthenticated)):
         logger.warning('Authentication error', extra={**log_extra, 'status_code': response.status_code})
-        create_system_event(
+        _safe_create_system_event(
             level='warn',
             category='auth',
             action='auth.failed',
@@ -73,7 +80,7 @@ def api_exception_handler(exc, context):
 
     if isinstance(exc, PermissionDenied):
         logger.warning('Permission denied', extra={**log_extra, 'status_code': response.status_code})
-        create_system_event(
+        _safe_create_system_event(
             level='warn',
             category='authorization',
             action='authz.denied',
