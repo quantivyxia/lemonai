@@ -112,7 +112,7 @@ class OpenAIChatClient:
         configured_model = os.getenv('OPENAI_MODEL', 'gpt-5-mini').strip() or 'gpt-5-mini'
         self.model = self.MODEL_ALIASES.get(configured_model, configured_model)
         self.api_base_url = os.getenv('OPENAI_API_BASE_URL', 'https://api.openai.com/v1').strip().rstrip('/')
-        self.timeout_seconds = int(os.getenv('OPENAI_TIMEOUT_SECONDS', '30'))
+        self.timeout_seconds = self._parse_timeout_seconds(os.getenv('OPENAI_TIMEOUT_SECONDS', '30'))
 
     def complete(self, messages: list[dict[str, str]]) -> str:
         if not self.enabled:
@@ -159,7 +159,18 @@ class OpenAIChatClient:
         if response.status_code >= 400:
             raise AssistantIntegrationError(self._parse_error(response))
 
-        payload = response.json()
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            logger.exception(
+                'OpenAI response was not valid JSON',
+                extra={
+                    'model': self.model,
+                    'status_code': response.status_code,
+                },
+            )
+            raise AssistantIntegrationError('A OpenAI retornou uma resposta invalida para esta requisicao.') from exc
+
         content = (((payload.get('choices') or [{}])[0]).get('message') or {}).get('content')
         if isinstance(content, str) and content.strip():
             return content.strip()
@@ -173,6 +184,17 @@ class OpenAIChatClient:
                 return '\n'.join(parts).strip()
 
         raise AssistantIntegrationError('A OpenAI nao retornou texto para esta resposta.')
+
+    def _parse_timeout_seconds(self, raw_value: str) -> int:
+        try:
+            timeout_seconds = int(str(raw_value).strip())
+        except (TypeError, ValueError):
+            logger.warning(
+                'Invalid OPENAI_TIMEOUT_SECONDS configured; falling back to default',
+                extra={'configured_timeout': raw_value},
+            )
+            return 30
+        return max(timeout_seconds, 1)
 
     def _parse_error(self, response: requests.Response) -> str:
         fallback = f'OpenAI retornou erro {response.status_code}.'
