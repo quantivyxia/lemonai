@@ -120,6 +120,13 @@ class OpenAIChatClient:
         if not self.api_key:
             raise AssistantConfigurationError('OpenAI nao configurada. Defina OPENAI_API_KEY no backend.')
 
+        payload = {
+            'model': self.model,
+            'messages': messages,
+        }
+        if not self.model.startswith('gpt-5'):
+            payload['temperature'] = 0.2
+
         try:
             response = requests.post(
                 f'{self.api_base_url}/chat/completions',
@@ -127,11 +134,7 @@ class OpenAIChatClient:
                     'Authorization': f'Bearer {self.api_key}',
                     'Content-Type': 'application/json',
                 },
-                json={
-                    'model': self.model,
-                    'temperature': 0.2,
-                    'messages': messages,
-                },
+                json=payload,
                 timeout=self.timeout_seconds,
             )
         except requests.exceptions.Timeout as exc:
