@@ -30,16 +30,26 @@ class AssistantChatView(APIView):
     throttle_scope = 'assistant'
 
     def post(self, request):
-        serializer = AssistantChatRequestSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        effective_user = get_effective_user(request)
-        dashboard_id = serializer.validated_data.get('dashboard_id')
-        page_context = serializer.validated_data.get('page_context') or {}
-        messages = serializer.validated_data['messages']
-        service = DashboardAssistantService()
+        phase = 'validate_request'
+        dashboard_id = None
+        page_context = {}
+        messages = []
+        effective_user = None
 
         try:
+            serializer = AssistantChatRequestSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+
+            phase = 'resolve_user'
+            effective_user = get_effective_user(request)
+            dashboard_id = serializer.validated_data.get('dashboard_id')
+            page_context = serializer.validated_data.get('page_context') or {}
+            messages = serializer.validated_data['messages']
+
+            phase = 'build_service'
+            service = DashboardAssistantService()
+
+            phase = 'openai_answer'
             reply = service.answer(
                 user=effective_user,
                 dashboard_id=dashboard_id,
@@ -91,7 +101,7 @@ class AssistantChatView(APIView):
             )
             return Response({'detail': str(exc), 'request_id': get_request_id()}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as exc:  # noqa: BLE001
-            logger.exception('Unexpected assistant error')
+            logger.exception('Unexpected assistant error', extra={'assistant_phase': phase})
             safe_create_system_event(
                 level='error',
                 category='system',
@@ -109,11 +119,12 @@ class AssistantChatView(APIView):
                     'page_path': page_context.get('path', ''),
                     'message_count': len(messages),
                     'exception_type': exc.__class__.__name__,
+                    'phase': phase,
                 },
             )
             return Response(
                 {
-                    'detail': 'Falha interna ao processar o assistente no servidor.',
+                    'detail': f'Falha interna ao processar o assistente no servidor. (fase: {phase})',
                     'request_id': get_request_id(),
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
