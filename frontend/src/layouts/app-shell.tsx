@@ -6,6 +6,7 @@ import { Outlet, useLocation } from 'react-router-dom'
 import { SidebarNav } from '@/components/layout/sidebar-nav'
 import { Topbar } from '@/components/layout/topbar'
 import { Button } from '@/components/ui/button'
+import { AppAssistant } from '@/features/reports/components/dashboard-assistant'
 import { useAuth } from '@/hooks/use-auth'
 import { usePlatformStore } from '@/hooks/use-platform-store'
 
@@ -103,6 +104,7 @@ export const AppShell = () => {
           </motion.div>
         ) : null}
       </AnimatePresence>
+      <AppAssistant />
     </div>
   )
 }
