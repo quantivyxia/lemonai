@@ -1,8 +1,7 @@
 import logging
 
-from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.models import update_last_login
-from django.core.exceptions import MultipleObjectsReturned
+from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist
 from django.db import DatabaseError
 from rest_framework import serializers
 from rest_framework.exceptions import APIException, AuthenticationFailed
@@ -66,28 +65,41 @@ class InsightHubTokenObtainPairSerializer(TokenObtainPairSerializer):
     username_field = 'email'
 
     def _authenticate_user(self, attrs):
-        authenticate_kwargs = {
-            self.username_field: attrs[self.username_field],
-            'password': attrs['password'],
-        }
-        try:
-            authenticate_kwargs['request'] = self.context['request']
-        except KeyError:
-            pass
+        email = User.objects.normalize_email(attrs[self.username_field])
+        password = attrs['password']
 
         try:
-            user = authenticate(**authenticate_kwargs)
+            user = (
+                User.objects.select_related('tenant', 'role', 'primary_group')
+                .filter(email=email)
+                .first()
+            )
         except MultipleObjectsReturned as exc:
             logger.exception('Multiple users found for login identifier')
             raise serializers.ValidationError(
                 'Existe mais de uma conta com este e-mail. Entre em contato com o suporte.'
             ) from exc
         except DatabaseError as exc:
-            logger.exception('Database error during user authentication')
-            raise LoginValidationPhaseError('authenticate_user:database_error') from exc
+            logger.exception('Database error during user lookup for authentication')
+            raise LoginValidationPhaseError('authenticate_user:lookup_user_database_error') from exc
         except Exception as exc:  # noqa: BLE001
-            logger.exception('Unexpected error during user authentication')
-            raise LoginValidationPhaseError(f'authenticate_user:{exc.__class__.__name__}') from exc
+            logger.exception('Unexpected error during user lookup for authentication')
+            raise LoginValidationPhaseError(f'authenticate_user:lookup_user:{exc.__class__.__name__}') from exc
+
+        if user is None:
+            raise AuthenticationFailed(self.error_messages['no_active_account'], 'no_active_account')
+
+        try:
+            password_valid = user.check_password(password)
+        except ObjectDoesNotExist as exc:
+            logger.exception('Broken relation while checking password during authentication')
+            raise LoginValidationPhaseError('authenticate_user:check_password:broken_relation') from exc
+        except Exception as exc:  # noqa: BLE001
+            logger.exception('Unexpected error while checking password during authentication')
+            raise LoginValidationPhaseError(f'authenticate_user:check_password:{exc.__class__.__name__}') from exc
+
+        if not password_valid:
+            raise AuthenticationFailed(self.error_messages['no_active_account'], 'no_active_account')
 
         if not api_settings.USER_AUTHENTICATION_RULE(user):
             raise AuthenticationFailed(self.error_messages['no_active_account'], 'no_active_account')
