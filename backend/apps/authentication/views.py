@@ -5,6 +5,7 @@ from django.conf import settings
 from django.core import signing
 from django.http import HttpResponseRedirect
 from rest_framework import serializers, status
+from rest_framework.exceptions import APIException
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -13,7 +14,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from apps.audit.services import create_system_event
 from apps.authentication import microsoft as ms_oauth
-from apps.authentication.serializers import InsightHubTokenObtainPairSerializer, MeSerializer
+from apps.authentication.serializers import InsightHubTokenObtainPairSerializer, LoginValidationPhaseError, MeSerializer
 from apps.common.request_context import get_request_id
 from apps.common.services import safe_related
 from apps.tenants.models import Tenant
@@ -62,8 +63,33 @@ class LoginView(TokenObtainPairView):
 
             phase = 'build_response'
             return Response(serializer.validated_data, status=status.HTTP_200_OK)
-        except serializers.ValidationError:
+        except (serializers.ValidationError, APIException):
             raise
+        except LoginValidationPhaseError as exc:
+            serializer_phase = exc.phase
+            logger.exception('Unexpected login validation error', extra={'auth_phase': serializer_phase})
+            safe_create_system_event(
+                level='error',
+                category='auth',
+                action='auth.login.validation_error',
+                message='Erro interno nao tratado durante a validacao do login.',
+                request=request,
+                user=user,
+                tenant=safe_related(user, 'tenant') if user else None,
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                metadata={
+                    'exception_type': exc.__class__.__name__,
+                    'phase': f'validate_credentials:{serializer_phase}',
+                    'has_serializer': serializer is not None,
+                },
+            )
+            return Response(
+                {
+                    'detail': f'Falha interna ao processar o login. (fase: validate_credentials:{serializer_phase})',
+                    'request_id': get_request_id(),
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
         except Exception as exc:  # noqa: BLE001
             logger.exception('Unexpected login error', extra={'auth_phase': phase})
             safe_create_system_event(
