@@ -14,6 +14,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from apps.audit.services import create_system_event
 from apps.authentication import microsoft as ms_oauth
 from apps.authentication.serializers import InsightHubTokenObtainPairSerializer, MeSerializer
+from apps.common.request_context import get_request_id
 from apps.common.services import safe_related
 from apps.tenants.models import Tenant
 from apps.users.models import AuthProvider, User
@@ -34,20 +35,59 @@ class LoginView(TokenObtainPairView):
     throttle_scope = 'login'
 
     def post(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        user = serializer.user
-        safe_create_system_event(
-            level='info',
-            category='auth',
-            action='auth.login',
-            message='Login realizado com sucesso.',
-            request=request,
-            user=user,
-            tenant=safe_related(user, 'tenant'),
-            status_code=status.HTTP_200_OK,
-        )
-        return Response(serializer.validated_data, status=status.HTTP_200_OK)
+        phase = 'build_serializer'
+        serializer = None
+        user = None
+
+        try:
+            serializer = self.get_serializer(data=request.data)
+
+            phase = 'validate_credentials'
+            serializer.is_valid(raise_exception=True)
+
+            phase = 'resolve_user'
+            user = serializer.user
+
+            phase = 'log_success_event'
+            safe_create_system_event(
+                level='info',
+                category='auth',
+                action='auth.login',
+                message='Login realizado com sucesso.',
+                request=request,
+                user=user,
+                tenant=safe_related(user, 'tenant'),
+                status_code=status.HTTP_200_OK,
+            )
+
+            phase = 'build_response'
+            return Response(serializer.validated_data, status=status.HTTP_200_OK)
+        except serializers.ValidationError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            logger.exception('Unexpected login error', extra={'auth_phase': phase})
+            safe_create_system_event(
+                level='error',
+                category='auth',
+                action='auth.login.unhandled_error',
+                message='Erro interno nao tratado durante o login.',
+                request=request,
+                user=user,
+                tenant=safe_related(user, 'tenant') if user else None,
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                metadata={
+                    'exception_type': exc.__class__.__name__,
+                    'phase': phase,
+                    'has_serializer': serializer is not None,
+                },
+            )
+            return Response(
+                {
+                    'detail': f'Falha interna ao processar o login. (fase: {phase})',
+                    'request_id': get_request_id(),
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
 
 class RefreshView(TokenRefreshView):
