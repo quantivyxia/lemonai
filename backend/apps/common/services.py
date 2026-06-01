@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import QuerySet
 
 
@@ -11,10 +12,17 @@ VIEWER = 'viewer'
 SAFE_METHODS = ('GET', 'HEAD', 'OPTIONS')
 
 
+def safe_related(instance, attr: str):
+    try:
+        return getattr(instance, attr, None)
+    except ObjectDoesNotExist:
+        return None
+
+
 def get_user_role_code(user) -> str | None:
     if not getattr(user, 'is_authenticated', False):
         return None
-    role = getattr(user, 'role', None)
+    role = safe_related(user, 'role')
     return getattr(role, 'code', None)
 
 

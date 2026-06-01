@@ -14,6 +14,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from apps.audit.services import create_system_event
 from apps.authentication import microsoft as ms_oauth
 from apps.authentication.serializers import InsightHubTokenObtainPairSerializer, MeSerializer
+from apps.common.services import safe_related
 from apps.tenants.models import Tenant
 from apps.users.models import AuthProvider, User
 
@@ -43,7 +44,7 @@ class LoginView(TokenObtainPairView):
             message='Login realizado com sucesso.',
             request=request,
             user=user,
-            tenant=getattr(user, 'tenant', None),
+            tenant=safe_related(user, 'tenant'),
             status_code=status.HTTP_200_OK,
         )
         return Response(serializer.validated_data, status=status.HTTP_200_OK)
@@ -247,7 +248,7 @@ class MicrosoftCallbackView(APIView):
             message='Login Microsoft realizado com sucesso.',
             request=request,
             user=user,
-            tenant=getattr(user, 'tenant', None),
+            tenant=safe_related(user, 'tenant'),
             status_code=200,
         )
         return _redirect_frontend(

@@ -1,14 +1,15 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
+from apps.common.services import safe_related
 from apps.users.models import User
 
 
 class MeSerializer(serializers.ModelSerializer):
-    role_code = serializers.CharField(source='role.code', read_only=True)
-    role_name = serializers.CharField(source='role.name', read_only=True)
-    tenant_name = serializers.CharField(source='tenant.name', read_only=True)
-    group_name = serializers.CharField(source='primary_group.name', read_only=True)
+    role_code = serializers.SerializerMethodField()
+    role_name = serializers.SerializerMethodField()
+    tenant_name = serializers.SerializerMethodField()
+    group_name = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -28,6 +29,22 @@ class MeSerializer(serializers.ModelSerializer):
             'last_login',
         ]
 
+    def get_role_code(self, obj):
+        role = safe_related(obj, 'role')
+        return getattr(role, 'code', None)
+
+    def get_role_name(self, obj):
+        role = safe_related(obj, 'role')
+        return getattr(role, 'name', None)
+
+    def get_tenant_name(self, obj):
+        tenant = safe_related(obj, 'tenant')
+        return getattr(tenant, 'name', None)
+
+    def get_group_name(self, obj):
+        group = safe_related(obj, 'primary_group')
+        return getattr(group, 'name', None)
+
 
 class InsightHubTokenObtainPairSerializer(TokenObtainPairSerializer):
     username_field = 'email'
@@ -35,10 +52,12 @@ class InsightHubTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
     def get_token(cls, user):
         token = super().get_token(user)
+        role = safe_related(user, 'role')
+        tenant = safe_related(user, 'tenant')
         token['user_id'] = str(user.id)
-        token['role'] = getattr(user.role, 'code', None)
+        token['role'] = getattr(role, 'code', None)
         token['tenant_id'] = str(user.tenant_id) if user.tenant_id else None
-        token['tenant_name'] = getattr(user.tenant, 'name', None)
+        token['tenant_name'] = getattr(tenant, 'name', None)
         return token
 
     def validate(self, attrs):
