@@ -135,7 +135,7 @@ class InsightHubTokenObtainPairSerializer(TokenObtainPairSerializer):
             phase = 'serialize_user'
             data['user'] = MeSerializer(self.user).data
             return data
-        except (serializers.ValidationError, APIException):
+        except (serializers.ValidationError, APIException, LoginValidationPhaseError):
             raise
         except Exception as exc:  # noqa: BLE001
             raise LoginValidationPhaseError(phase) from exc
