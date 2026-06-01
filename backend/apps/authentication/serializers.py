@@ -1,9 +1,12 @@
 import logging
 
+from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.models import update_last_login
+from django.core.exceptions import MultipleObjectsReturned
+from django.db import DatabaseError
 from rest_framework import serializers
-from rest_framework.exceptions import APIException
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, TokenObtainSerializer
+from rest_framework.exceptions import APIException, AuthenticationFailed
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.settings import api_settings
 
 from apps.common.services import safe_related
@@ -62,6 +65,34 @@ class MeSerializer(serializers.ModelSerializer):
 class InsightHubTokenObtainPairSerializer(TokenObtainPairSerializer):
     username_field = 'email'
 
+    def _authenticate_user(self, attrs):
+        authenticate_kwargs = {
+            self.username_field: attrs[self.username_field],
+            'password': attrs['password'],
+        }
+        try:
+            authenticate_kwargs['request'] = self.context['request']
+        except KeyError:
+            pass
+
+        try:
+            user = authenticate(**authenticate_kwargs)
+        except MultipleObjectsReturned as exc:
+            logger.exception('Multiple users found for login identifier')
+            raise serializers.ValidationError(
+                'Existe mais de uma conta com este e-mail. Entre em contato com o suporte.'
+            ) from exc
+        except DatabaseError as exc:
+            logger.exception('Database error during user authentication')
+            raise LoginValidationPhaseError('authenticate_user:database_error') from exc
+        except Exception as exc:  # noqa: BLE001
+            logger.exception('Unexpected error during user authentication')
+            raise LoginValidationPhaseError(f'authenticate_user:{exc.__class__.__name__}') from exc
+
+        if not api_settings.USER_AUTHENTICATION_RULE(user):
+            raise AuthenticationFailed(self.error_messages['no_active_account'], 'no_active_account')
+        return user
+
     @classmethod
     def get_token(cls, user):
         token = super().get_token(user)
@@ -76,7 +107,8 @@ class InsightHubTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         phase = 'authenticate_user'
         try:
-            data = TokenObtainSerializer.validate(self, attrs)
+            data = {}
+            self.user = self._authenticate_user(attrs)
 
             phase = 'status_check'
             if self.user.status != 'active':
