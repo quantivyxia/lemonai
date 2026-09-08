@@ -1,4 +1,4 @@
-﻿import { DatabaseZap, FileUp, PlugZap, RefreshCcw, ShieldCheck, TestTube2 } from 'lucide-react'
+import { DatabaseZap, FileUp, PlugZap, RefreshCcw, ShieldCheck, TestTube2, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -21,6 +21,7 @@ import type {
   PowerBIDatasetOption,
   PowerBIGateway,
   PowerBIGatewayDataSource,
+  PowerBIReportOption,
   PowerBIWorkspaceOption,
 } from '@/types/entities'
 
@@ -69,10 +70,12 @@ export const PowerBIPage = () => {
   const [gateways, setGateways] = useState<PowerBIGateway[]>([])
   const [datasources, setDatasources] = useState<PowerBIGatewayDataSource[]>([])
   const [workspaceOptions, setWorkspaceOptions] = useState<PowerBIWorkspaceOption[]>([])
+  const [reportOptions, setReportOptions] = useState<PowerBIReportOption[]>([])
   const [datasetOptions, setDatasetOptions] = useState<PowerBIDatasetOption[]>([])
 
   const [selectedConnectionId, setSelectedConnectionId] = useState('')
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState('')
+  const [selectedReportId, setSelectedReportId] = useState('')
   const [selectedDatasetId, setSelectedDatasetId] = useState('')
   const [selectedGatewayId, setSelectedGatewayId] = useState('')
   const [selectedDatasourceId, setSelectedDatasourceId] = useState('')
@@ -172,6 +175,16 @@ export const PowerBIPage = () => {
     [datasetOptions],
   )
 
+  const reportSelectOptions = useMemo(
+    () =>
+      reportOptions.map((report) => ({
+        value: report.id,
+        label: report.name,
+        keywords: `${report.name} ${report.datasetId ?? ''}`,
+      })),
+    [reportOptions],
+  )
+
   const gatewaySelectOptions = useMemo(
     () =>
       visibleGateways.map((gateway) => ({
@@ -222,18 +235,23 @@ export const PowerBIPage = () => {
   useEffect(() => {
     if (!selectedConnection) {
       setSelectedWorkspaceId('')
+      setSelectedReportId('')
       setSelectedDatasetId('')
       setSelectedGatewayId('')
       setSelectedDatasourceId('')
       setWorkspaceOptions([])
+      setReportOptions([])
       setDatasetOptions([])
       return
     }
 
-    setSelectedWorkspaceId((current) => current || selectedConnection.defaultWorkspaceId || '')
+    setWorkspaceOptions([])
+    setSelectedWorkspaceId(selectedConnection.defaultWorkspaceId || '')
+    setSelectedReportId('')
     setSelectedDatasetId('')
     setSelectedGatewayId('')
     setSelectedDatasourceId('')
+    setReportOptions([])
     setDatasetOptions([])
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedConnectionId])
@@ -424,17 +442,25 @@ export const PowerBIPage = () => {
     }
   }
 
-  const loadWorkspacesFromConnection = async () => {
-    if (!selectedConnectionId) {
+  const loadWorkspacesFromConnection = async (connectionId = selectedConnectionId) => {
+    if (!connectionId) {
       toast.error('Selecione uma conexao primeiro.')
       return
     }
 
     try {
-      const items = await platformApi.listPowerBIWorkspaces(selectedConnectionId)
+      const items = await platformApi.listPowerBIWorkspaces(connectionId)
       setWorkspaceOptions(items)
       if (items.length > 0) {
-        setSelectedWorkspaceId((current) => current || items[0].id)
+        const preferredWorkspaceId =
+          connections.find((connection) => connection.id === connectionId)?.defaultWorkspaceId || ''
+
+        const nextWorkspaceId =
+          items.find((workspace) => workspace.id === preferredWorkspaceId)?.id ?? items[0].id
+
+        setSelectedWorkspaceId(nextWorkspaceId)
+      } else {
+        setSelectedWorkspaceId('')
       }
       toast.success(`Workspaces carregados: ${items.length}`)
     } catch (error) {
@@ -448,9 +474,21 @@ export const PowerBIPage = () => {
     try {
       const items = await platformApi.listPowerBIDatasets(selectedConnectionId, workspaceId)
       setDatasetOptions(items)
-      setSelectedDatasetId(items[0]?.id ?? '')
+      setSelectedDatasetId((current) => (items.some((dataset) => dataset.id === current) ? current : items[0]?.id ?? ''))
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Nao foi possivel carregar datasets.')
+    }
+  }
+
+  const loadReportsFromWorkspace = async (workspaceId: string) => {
+    if (!selectedConnectionId || !workspaceId) return
+
+    try {
+      const items = await platformApi.listPowerBIReports(selectedConnectionId, workspaceId)
+      setReportOptions(items)
+      setSelectedReportId((current) => (items.some((report) => report.id === current) ? current : items[0]?.id ?? ''))
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Nao foi possivel carregar dashboards do workspace.')
     }
   }
 
@@ -501,10 +539,43 @@ export const PowerBIPage = () => {
       if (pbixInputRef.current) pbixInputRef.current.value = ''
       await reloadData()
       await loadData()
+      await loadReportsFromWorkspace(selectedWorkspaceId)
+      await loadDatasetsFromWorkspace(selectedWorkspaceId)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Falha ao enviar PBIX para o Power BI.')
     } finally {
       setIsUploadingPbix(false)
+    }
+  }
+
+  const deleteReportFromWorkspace = async () => {
+    if (!selectedConnectionId || !selectedWorkspaceId || !selectedReportId) {
+      toast.error('Selecione conexao, workspace e dashboard para excluir.')
+      return
+    }
+
+    const selectedReport = reportOptions.find((report) => report.id === selectedReportId)
+    const confirmed = window.confirm(
+      `Excluir o dashboard "${selectedReport?.name ?? 'selecionado'}"? Essa acao remove o relatorio, o modelo semantico vinculado e o cadastro da plataforma. Essa operacao nao pode ser desfeita.`,
+    )
+    if (!confirmed) return
+
+    try {
+      const result = await platformApi.deletePowerBIReport(selectedConnectionId, {
+        workspace_id: selectedWorkspaceId,
+        report_id: selectedReportId,
+      })
+      await reloadData()
+      await loadData()
+      await loadReportsFromWorkspace(selectedWorkspaceId)
+      await loadDatasetsFromWorkspace(selectedWorkspaceId)
+      if (result.fullyDeleted) {
+        toast.success(result.detail)
+      } else {
+        toast.error(result.detail)
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Falha ao excluir dashboard do workspace.')
     }
   }
 
@@ -535,11 +606,14 @@ export const PowerBIPage = () => {
 
   useEffect(() => {
     if (!selectedWorkspaceId) {
+      setReportOptions([])
+      setSelectedReportId('')
       setDatasetOptions([])
       setSelectedDatasetId('')
       return
     }
 
+    void loadReportsFromWorkspace(selectedWorkspaceId)
     void loadDatasetsFromWorkspace(selectedWorkspaceId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedWorkspaceId, selectedConnectionId])
@@ -746,6 +820,48 @@ export const PowerBIPage = () => {
             <p className="rounded-lg border border-border/70 bg-muted/25 px-3 py-2 text-xs text-muted-foreground">
               {pbixFile ? `Arquivo selecionado: ${pbixFile.name}` : 'Selecione um arquivo .pbix para iniciar o upload.'}
             </p>
+
+            <div className="rounded-xl border border-border/70 bg-muted/15 p-3">
+              <div className="mb-3">
+                <h3 className="text-sm font-semibold text-slate-900">Excluir dashboard do workspace</h3>
+                <p className="text-xs text-muted-foreground">
+                  Selecione um dashboard do workspace atual para remover o relatorio e o modelo semantico do Power BI.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 md:flex-row md:items-center">
+                <div className="w-full md:flex-1">
+                  <SearchableSelect
+                    value={selectedReportId}
+                    onValueChange={setSelectedReportId}
+                    options={reportSelectOptions}
+                    placeholder={
+                      selectedWorkspaceId
+                        ? 'Selecione o dashboard para excluir'
+                        : 'Selecione um workspace para listar dashboards'
+                    }
+                    searchPlaceholder="Pesquisar dashboard"
+                    triggerClassName="w-full"
+                    disabled={isReadOnly || !selectedWorkspaceId || reportSelectOptions.length === 0}
+                  />
+                </div>
+                <Button
+                  variant="destructive"
+                  className="gap-2 whitespace-nowrap md:flex-none"
+                  onClick={() => void deleteReportFromWorkspace()}
+                  disabled={isReadOnly || !selectedReportId}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Excluir dashboard
+                </Button>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {!selectedWorkspaceId
+                  ? 'Escolha um workspace acima para carregar os dashboards disponiveis.'
+                  : reportOptions.length > 0
+                    ? `${reportOptions.length} dashboard(s) encontrado(s) neste workspace.`
+                    : 'Nenhum dashboard encontrado no workspace selecionado.'}
+              </p>
+            </div>
           </CardContent>
         </Card>
 

@@ -20,9 +20,7 @@ class RoleSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
 
     def get_permission_codes(self, obj):
-        return list(
-            obj.role_permissions.select_related('permission').values_list('permission__code', flat=True)
-        )
+        return [role_permission.permission.code for role_permission in obj.role_permissions.all()]
 
 
 class RolePermissionSerializer(serializers.ModelSerializer):

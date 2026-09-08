@@ -10,7 +10,6 @@ from django.shortcuts import get_object_or_404
 
 from apps.dashboards.models import Dashboard
 from apps.permissions.services import (
-    build_user_rls_embed_payload,
     build_user_report_filters,
     get_user_rls_context,
     has_dashboard_access,
@@ -35,9 +34,6 @@ class EmbedConfig:
     embed_url: str
     access_token: str
     expires_at: datetime
-    rls: list[dict]
-    rls_payload: dict
-    rls_roles: list[str]
     report_filters: list[dict]
 
     def to_dict(self):
@@ -48,22 +44,19 @@ class EmbedConfig:
             'embedUrl': self.embed_url,
             'accessToken': self.access_token,
             'expiresAt': self.expires_at.isoformat(),
-            'rls': self.rls,
-            'rlsPayload': self.rls_payload,
-            'rlsRoles': self.rls_roles,
             'reportFilters': self.report_filters,
         }
 
 
 class PowerBIEmbedService:
     """
-    Gera configuracao de embed com suporte a RLS dinamico.
+    Gera configuracao de embed aplicando filtros de relatorio em todas as paginas.
 
     Fluxo:
     - valida acesso ao dashboard;
     - coleta regras RLS ativas do usuario;
-    - monta payload tokenizado para CUSTOMDATA();
-    - envia effective identity + roles no GenerateToken.
+    - converte regras em filtros de relatorio;
+    - gera embed token sem effective identity.
     """
 
     def get_embed_config(self, dashboard_id, user_context) -> EmbedConfig:
@@ -73,15 +66,11 @@ class PowerBIEmbedService:
             raise EmbedAccessDenied('Usuario sem permissao para este dashboard.')
 
         rls_context = get_user_rls_context(user_context, dashboard)
-        rls_payload = build_user_rls_embed_payload(user_context, dashboard, rls_context=rls_context)
         report_filters = build_user_report_filters(user_context, dashboard, rls_context=rls_context)
-        rls_roles = self._resolve_rls_roles(rls_context)
         token, expires_at, embed_url = self._build_access_token(
-            dashboard,
-            user_context,
-            rls_context,
-            rls_payload=rls_payload,
-            rls_roles=rls_roles,
+            dashboard=dashboard,
+            user=user_context,
+            rls_context=rls_context,
         )
 
         return EmbedConfig(
@@ -91,23 +80,10 @@ class PowerBIEmbedService:
             embed_url=embed_url,
             access_token=token,
             expires_at=expires_at,
-            rls=rls_context,
-            rls_payload=rls_payload,
-            rls_roles=rls_roles,
             report_filters=report_filters,
         )
 
-    def _resolve_rls_roles(self, rls_context: list[dict]) -> list[str]:
-        configured = os.getenv('POWERBI_RLS_ROLES', '').strip()
-        if configured:
-            return [role.strip() for role in configured.split(',') if role.strip()]
-
-        default_role = os.getenv('POWERBI_DEFAULT_RLS_ROLE', 'InsightHubRLS').strip()
-        if default_role and rls_context:
-            return [default_role]
-        return []
-
-    def _build_access_token(self, dashboard, user, rls_context, rls_payload: dict, rls_roles: list[str]):
+    def _build_access_token(self, dashboard, user, rls_context: list[dict]):
         connection = PowerBIConnection.objects.filter(
             tenant=dashboard.tenant,
             is_active=True,
@@ -128,10 +104,6 @@ class PowerBIEmbedService:
                     workspace_id=workspace_external_id,
                     report_id=dashboard.report_id,
                     dataset_id=dashboard.dataset_id,
-                    user=user,
-                    rls_context=rls_context,
-                    rls_payload=rls_payload,
-                    rls_roles=rls_roles,
                 )
             except PowerBIServiceError as exc:
                 if self._is_entity_not_found(exc):
@@ -150,20 +122,6 @@ class PowerBIEmbedService:
                         workspace_id=workspace_external_id,
                         report_id=dashboard.report_id,
                         dataset_id=dashboard.dataset_id,
-                        user=user,
-                        rls_context=rls_context,
-                        rls_payload=rls_payload,
-                        rls_roles=rls_roles,
-                    )
-                elif self._should_fallback_from_effective_identity(exc):
-                    token_payload = client.generate_embed_token(
-                        workspace_id=workspace_external_id,
-                        report_id=dashboard.report_id,
-                        dataset_id=dashboard.dataset_id,
-                        user=user,
-                        rls_context=[],
-                        rls_payload={},
-                        rls_roles=[],
                     )
                 else:
                     raise EmbedIntegrationError(str(exc)) from exc
@@ -179,26 +137,23 @@ class PowerBIEmbedService:
             except PowerBIServiceError as exc:
                 raise EmbedIntegrationError(str(exc)) from exc
 
-        # Fallback demo para ambiente ainda sem conexao configurada.
+        allow_demo_fallback = os.getenv('INSIGHTHUB_ALLOW_DEMO_EMBED_FALLBACK', 'false').strip().lower() in {
+            '1',
+            'true',
+            'yes',
+            'on',
+        }
+        if not allow_demo_fallback:
+            raise EmbedIntegrationError(
+                'Nenhuma conexao Power BI ativa encontrada para gerar o embed em modo de producao.'
+            )
+
         seed = f'{dashboard.id}:{user.id}:{len(rls_context)}'
         prefix = os.getenv('INSIGHTHUB_EMBED_TOKEN_PREFIX', 'demo-embed-token')
         token = f'{prefix}:{seed}'
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
         embed_url = dashboard.embed_url or 'https://app.powerbi.com/reportEmbed'
         return token, expires_at, embed_url
-
-    def _should_fallback_from_effective_identity(self, error: Exception) -> bool:
-        allow_fallback = os.getenv('POWERBI_RLS_FALLBACK_ON_IDENTITY_ERROR', 'true').strip().lower() in {
-            '1',
-            'true',
-            'yes',
-            'on',
-        }
-        if not allow_fallback:
-            return False
-
-        message = str(error).strip().lower()
-        return 'effective identity' in message
 
     def _is_entity_not_found(self, error: Exception) -> bool:
         message = str(error).strip().lower()

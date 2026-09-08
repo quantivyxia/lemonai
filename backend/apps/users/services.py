@@ -34,31 +34,49 @@ def sync_group_dashboard_access(group) -> None:
     existing_rules.filter(dashboard_id__in=dashboard_ids, is_active=False).update(is_active=True)
 
 
-def sync_user_direct_dashboard_access(user, dashboard_ids: list[str] | None) -> None:
+def sync_user_dashboard_blocks(user, blocked_dashboard_ids: list[str] | None) -> None:
     """
-    Sincroniza regras diretas de dashboard por usuário.
+    Sincroniza dashboards bloqueados para o usuario.
+
+    O grupo continua sendo a fonte de verdade do acesso base.
+    No usuario armazenamos apenas excecoes negativas (bloqueios).
     """
-    if dashboard_ids is None:
+    if blocked_dashboard_ids is None:
         return
 
-    desired_ids = set(dashboard_ids)
-    existing_rules = DashboardAccess.objects.filter(user=user).select_related('dashboard')
-    existing_dashboard_ids = set(existing_rules.values_list('dashboard_id', flat=True))
+    desired_blocked_ids = set(blocked_dashboard_ids or [])
+    existing_rules = DashboardAccess.objects.filter(user=user)
+    existing_by_dashboard_id = {str(rule.dashboard_id): rule for rule in existing_rules}
 
-    rules_to_delete = existing_rules.exclude(dashboard_id__in=desired_ids)
+    rules_to_delete = existing_rules.exclude(dashboard_id__in=desired_blocked_ids)
     if rules_to_delete.exists():
         rules_to_delete.delete()
 
-    missing_ids = desired_ids - existing_dashboard_ids
-    for dashboard_id in missing_ids:
-        DashboardAccess.objects.create(
-            tenant=user.tenant,
-            dashboard_id=dashboard_id,
-            user=user,
-            group=None,
-            role=None,
-            access_level=AccessLevel.VIEW,
-            is_active=True,
-        )
+    for dashboard_id in desired_blocked_ids:
+        existing_rule = existing_by_dashboard_id.get(dashboard_id)
 
-    existing_rules.filter(dashboard_id__in=desired_ids, is_active=False).update(is_active=True)
+        if existing_rule is None:
+            DashboardAccess.objects.create(
+                tenant=user.tenant,
+                dashboard_id=dashboard_id,
+                user=user,
+                group=None,
+                role=None,
+                access_level=AccessLevel.VIEW,
+                is_active=False,
+            )
+            continue
+
+        updates = []
+        if existing_rule.tenant_id != user.tenant_id:
+            existing_rule.tenant = user.tenant
+            updates.append('tenant')
+        if existing_rule.access_level != AccessLevel.VIEW:
+            existing_rule.access_level = AccessLevel.VIEW
+            updates.append('access_level')
+        if existing_rule.is_active:
+            existing_rule.is_active = False
+            updates.append('is_active')
+
+        if updates:
+            existing_rule.save(update_fields=[*updates, 'updated_at'])

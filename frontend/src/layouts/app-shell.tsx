@@ -6,23 +6,24 @@ import { Outlet, useLocation } from 'react-router-dom'
 import { SidebarNav } from '@/components/layout/sidebar-nav'
 import { Topbar } from '@/components/layout/topbar'
 import { Button } from '@/components/ui/button'
+import { AppAssistant } from '@/features/reports/components/dashboard-assistant'
 import { useAuth } from '@/hooks/use-auth'
 import { usePlatformStore } from '@/hooks/use-platform-store'
 
 export const AppShell = () => {
   const { actorUser, isViewAsMode, stopViewAs, user } = useAuth()
-  const { brandings } = usePlatformStore()
+  const { brandings, loadError } = usePlatformStore()
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const { pathname } = useLocation()
-  const isDashboardViewRoute = /^\/dashboards\/[^/]+$/.test(pathname)
+  const isDashboardViewRoute = /^\/reports\/[^/]+$/.test(pathname)
   const tenantPortalName = useMemo(
     () => brandings.find((item) => item.tenantId === user?.tenantId)?.platformName?.trim(),
     [brandings, user?.tenantId],
   )
   const portalName =
     user?.role === 'super_admin'
-      ? 'InsightHub'
-      : tenantPortalName || user?.tenantName || 'InsightHub'
+      ? 'LemonAI'
+      : tenantPortalName || user?.tenantName || 'LemonAI'
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#ebf3ff_0%,#f3f6fb_33%,#f5f7fb_65%,#f3f6fb_100%)]">
@@ -52,6 +53,11 @@ export const AppShell = () => {
               </div>
             </div>
           ) : null}
+          {loadError ? (
+            <div className="border-b border-rose-200 bg-rose-50/90 px-4 py-3 text-sm text-rose-900 sm:px-6">
+              Falha ao carregar dados da plataforma. {loadError}
+            </div>
+          ) : null}
           <main
             className={
               isDashboardViewRoute
@@ -63,7 +69,6 @@ export const AppShell = () => {
           </main>
         </div>
       </div>
-
       <AnimatePresence>
         {isMobileSidebarOpen ? (
           <motion.div
@@ -99,6 +104,7 @@ export const AppShell = () => {
           </motion.div>
         ) : null}
       </AnimatePresence>
+      <AppAssistant />
     </div>
   )
 }
