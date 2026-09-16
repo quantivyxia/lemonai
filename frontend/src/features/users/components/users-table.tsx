@@ -26,7 +26,8 @@ import { useAuth } from '@/hooks/use-auth'
 import { usePlatformStore } from '@/hooks/use-platform-store'
 import { useTenantScope } from '@/hooks/use-tenant-scope'
 import { formatDate } from '@/lib/utils'
-import type { User } from '@/types/entities'
+import { platformApi } from '@/services/platform-api'
+import type { RLSRule, User } from '@/types/entities'
 
 const roleLabelMap: Record<User['role'], string> = {
   super_admin: 'Super_admin',
@@ -48,22 +49,41 @@ type UserForm = {
   tenantId: string
   role: User['role']
   groupIds: string[]
-  dashboardIds: string[]
+  blockedDashboardIds: string[]
   password: string
   status: User['status']
 }
+
+const buildRLSMirrorKey = (
+  rule: Pick<
+    RLSRule,
+    'dashboardId' | 'tableName' | 'columnName' | 'operator' | 'ruleType' | 'values' | 'notes' | 'isActive'
+  >,
+) =>
+  JSON.stringify({
+    dashboardId: rule.dashboardId,
+    tableName: rule.tableName.trim(),
+    columnName: rule.columnName.trim(),
+    operator: rule.operator,
+    ruleType: rule.ruleType,
+    values: [...rule.values].map((value) => value.trim()).sort(),
+    notes: rule.notes?.trim() ?? '',
+    isActive: rule.isActive,
+  })
 
 export const UsersTable = () => {
   const navigate = useNavigate()
   const { actorUser, isViewAsMode, startViewAs } = useAuth()
   const { isSuperAdmin, userTenantName, userTenantId, filterByTenant } = useTenantScope()
-  const { users, tenants, groups, dashboards, upsertUser, toggleUserStatus, deleteUser, deleteUsers } = usePlatformStore()
+  const { users, tenants, groups, dashboards, rlsRules, reloadData, upsertUser, toggleUserStatus, deleteUser, deleteUsers } = usePlatformStore()
   const [searchTerm, setSearchTerm] = useState('')
   const [tenantFilter, setTenantFilter] = useState(isSuperAdmin ? 'all' : (userTenantName ?? 'all'))
   const [statusFilter, setStatusFilter] = useState('all')
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [mirrorAccessEnabled, setMirrorAccessEnabled] = useState(false)
+  const [mirrorSourceUserId, setMirrorSourceUserId] = useState('')
   const [form, setForm] = useState<UserForm>({
     tenantId: userTenantId ?? tenants[0]?.id ?? '',
     firstName: '',
@@ -71,14 +91,28 @@ export const UsersTable = () => {
     email: '',
     role: 'viewer',
     groupIds: [],
-    dashboardIds: [],
+    blockedDashboardIds: [],
     password: '',
     status: 'active',
   })
 
-  const buildSuggestedPassword = (_tenantId: string) => {
-    const randomDigits = Math.floor(100000 + Math.random() * 900000)
-    return `${randomDigits}`
+  const buildSuggestedPassword = () => {
+    const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+    const digits = '23456789'
+    const symbols = '@#$%&*!?'
+    const allChars = `${letters}${digits}${symbols}`
+    const requiredChars = [
+      letters[Math.floor(Math.random() * letters.length)],
+      digits[Math.floor(Math.random() * digits.length)],
+    ]
+
+    while (requiredChars.length < 8) {
+      requiredChars.push(allChars[Math.floor(Math.random() * allChars.length)])
+    }
+
+    return requiredChars
+      .sort(() => Math.random() - 0.5)
+      .join('')
   }
 
   const scopedUsers = useMemo(
@@ -117,10 +151,65 @@ export const UsersTable = () => {
     () => new Map(dashboards.map((dashboard) => [dashboard.id, dashboard.name])),
     [dashboards],
   )
+  const dashboardIdByName = useMemo(
+    () => new Map(dashboardOptions.map((dashboard) => [dashboard.name, dashboard.id])),
+    [dashboardOptions],
+  )
+  const inheritedDashboardIds = useMemo(
+    () =>
+      [
+        ...new Set(
+          groupOptions
+            .filter((group) => form.groupIds.includes(group.id))
+            .flatMap((group) =>
+              group.dashboardIds && group.dashboardIds.length > 0
+                ? group.dashboardIds
+                : group.dashboards
+                    .map((dashboardName) => dashboardIdByName.get(dashboardName))
+                    .filter((dashboardId): dashboardId is string => Boolean(dashboardId)),
+            ),
+        ),
+      ],
+    [dashboardIdByName, form.groupIds, groupOptions],
+  )
+  const inheritedDashboardIdSet = useMemo(() => new Set(inheritedDashboardIds), [inheritedDashboardIds])
+  const visibleInheritedDashboardIds = useMemo(
+    () => inheritedDashboardIds.filter((dashboardId) => !form.blockedDashboardIds.includes(dashboardId)),
+    [form.blockedDashboardIds, inheritedDashboardIds],
+  )
+  const inheritedDashboardOptions = useMemo(
+    () =>
+      dashboardOptions.filter(
+        (dashboard) => inheritedDashboardIdSet.has(dashboard.id) || visibleInheritedDashboardIds.includes(dashboard.id),
+      ),
+    [dashboardOptions, inheritedDashboardIdSet, visibleInheritedDashboardIds],
+  )
+  const mirrorSourceOptions = useMemo(
+    () =>
+      scopedUsers
+        .filter((user) => user.tenantId === form.tenantId && user.id !== form.id)
+        .sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`))
+        .map((user) => ({
+          value: user.id,
+          label: `${user.firstName} ${user.lastName}`.trim(),
+          keywords: `${user.email} ${user.groups.join(' ')}`,
+        })),
+    [form.id, form.tenantId, scopedUsers],
+  )
+  const mirrorSourceUser = useMemo(
+    () => scopedUsers.find((user) => user.id === mirrorSourceUserId) ?? null,
+    [mirrorSourceUserId, scopedUsers],
+  )
 
   useEffect(() => {
     setTenantFilter(isSuperAdmin ? 'all' : (userTenantName ?? 'all'))
   }, [isSuperAdmin, userTenantName])
+
+  useEffect(() => {
+    if (!mirrorSourceUserId) return
+    if (mirrorSourceOptions.some((option) => option.value === mirrorSourceUserId)) return
+    setMirrorSourceUserId('')
+  }, [mirrorSourceOptions, mirrorSourceUserId])
 
   useEffect(() => {
     if (!isDialogOpen) return
@@ -128,11 +217,20 @@ export const UsersTable = () => {
     setForm((current) => ({
       ...current,
       groupIds: current.groupIds.filter((groupId) => groupOptions.some((group) => group.id === groupId)),
-      dashboardIds: current.dashboardIds.filter((dashboardId) =>
+      blockedDashboardIds: current.blockedDashboardIds.filter((dashboardId) =>
         dashboardOptions.some((dashboard) => dashboard.id === dashboardId),
       ),
     }))
   }, [dashboardOptions, groupOptions, isDialogOpen])
+
+  useEffect(() => {
+    if (!isDialogOpen) return
+
+    setForm((current) => ({
+      ...current,
+      blockedDashboardIds: current.blockedDashboardIds.filter((dashboardId) => inheritedDashboardIdSet.has(dashboardId)),
+    }))
+  }, [inheritedDashboardIdSet, isDialogOpen])
 
   const filteredData = useMemo(() => {
     return scopedUsers.filter((user) => {
@@ -155,6 +253,8 @@ export const UsersTable = () => {
     if (isViewAsMode) return
     const nextTenantId = userTenantId ?? tenants[0]?.id ?? ''
     setShowPassword(false)
+    setMirrorAccessEnabled(false)
+    setMirrorSourceUserId('')
     setForm({
       tenantId: nextTenantId,
       firstName: '',
@@ -162,8 +262,8 @@ export const UsersTable = () => {
       email: '',
       role: 'viewer',
       groupIds: [],
-      dashboardIds: [],
-      password: buildSuggestedPassword(nextTenantId),
+      blockedDashboardIds: [],
+      password: buildSuggestedPassword(),
       status: 'active',
     })
     setIsDialogOpen(true)
@@ -172,6 +272,8 @@ export const UsersTable = () => {
   const openEditDialog = (user: User) => {
     if (isViewAsMode) return
     setShowPassword(false)
+    setMirrorAccessEnabled(false)
+    setMirrorSourceUserId('')
     setForm({
       id: user.id,
       tenantId: user.tenantId,
@@ -180,11 +282,73 @@ export const UsersTable = () => {
       email: user.email,
       role: user.role,
       groupIds: user.groupIds ?? [],
-      dashboardIds: user.dashboardIds ?? [],
+      blockedDashboardIds: user.blockedDashboardIds ?? [],
       password: user.password ?? '',
       status: user.status,
     })
     setIsDialogOpen(true)
+  }
+
+  const applyMirroredAccess = (sourceUserId: string) => {
+    setMirrorSourceUserId(sourceUserId)
+    const sourceUser = scopedUsers.find((user) => user.id === sourceUserId)
+    if (!sourceUser) return
+
+    const allowedGroupIds = new Set(groupOptions.map((group) => group.id))
+    const allowedDashboardIds = new Set(dashboardOptions.map((dashboard) => dashboard.id))
+
+    setForm((current) => ({
+      ...current,
+      groupIds: (sourceUser.groupIds ?? []).filter((groupId) => allowedGroupIds.has(groupId)),
+      blockedDashboardIds: (sourceUser.blockedDashboardIds ?? []).filter((dashboardId) => allowedDashboardIds.has(dashboardId)),
+    }))
+  }
+
+  const syncMirroredRLSRules = async (targetUserId: string, sourceUserId: string) => {
+    const sourceRules = rlsRules.filter((rule) => rule.userId === sourceUserId && rule.tenantId === form.tenantId)
+    const targetRules = rlsRules.filter((rule) => rule.userId === targetUserId && rule.tenantId === form.tenantId)
+
+    const remainingTargetRules = new Map<string, typeof targetRules>()
+    for (const rule of targetRules) {
+      const key = buildRLSMirrorKey(rule)
+      const queue = remainingTargetRules.get(key) ?? []
+      queue.push(rule)
+      remainingTargetRules.set(key, queue)
+    }
+
+    const createPromises: Promise<unknown>[] = []
+    for (const rule of sourceRules) {
+      const key = buildRLSMirrorKey(rule)
+      const queue = remainingTargetRules.get(key)
+      if (queue && queue.length > 0) {
+        queue.shift()
+        if (queue.length === 0) {
+          remainingTargetRules.delete(key)
+        }
+        continue
+      }
+
+      createPromises.push(
+        platformApi.upsertRLSRule({
+          tenant: rule.tenantId,
+          dashboard: rule.dashboardId,
+          user: targetUserId,
+          table_name: rule.tableName,
+          column_name: rule.columnName,
+          operator: rule.operator,
+          rule_type: rule.ruleType,
+          values: rule.values,
+          notes: rule.notes ?? '',
+          is_active: rule.isActive,
+        }),
+      )
+    }
+
+    const deletePromises = [...remainingTargetRules.values()]
+      .flat()
+      .map((rule) => platformApi.deleteRLSRule(rule.id))
+
+    await Promise.all([...deletePromises, ...createPromises])
   }
 
   const submitForm = async () => {
@@ -198,12 +362,16 @@ export const UsersTable = () => {
       toast.error('Preencha nome, sobrenome e e-mail.')
       return
     }
-    if (isCreate && !form.password.trim()) {
+    if (isCreate && !form.password) {
       toast.error('Defina uma senha inicial para o usuario.')
       return
     }
-    if (form.password.trim() && !/^\d{6}$/.test(form.password.trim())) {
-      toast.error('A senha inicial deve ter exatamente 6 digitos numericos.')
+    if (form.password && !/^(?=.*[A-Za-z])(?=.*\d).{6,}$/.test(form.password)) {
+      toast.error('A senha deve ter pelo menos 6 caracteres e conter letras e numeros.')
+      return
+    }
+    if (mirrorAccessEnabled && !mirrorSourceUserId) {
+      toast.error('Selecione o usuario que servira de base para espelhar os acessos.')
       return
     }
 
@@ -212,7 +380,9 @@ export const UsersTable = () => {
         .filter((group) => form.groupIds.includes(group.id))
         .map((group) => group.name)
 
-      await upsertUser({
+      const password = form.password
+
+      const savedUser = await upsertUser({
         id: form.id,
         tenantId: form.tenantId,
         firstName: form.firstName.trim(),
@@ -222,10 +392,18 @@ export const UsersTable = () => {
         group: selectedGroups[0] ?? '',
         groups: selectedGroups,
         groupIds: form.groupIds,
-        dashboardIds: form.dashboardIds,
-        ...((isCreate || form.password.trim()) ? { password: form.password.trim() } : {}),
+        dashboardIds: visibleInheritedDashboardIds,
+        blockedDashboardIds: form.blockedDashboardIds,
+        ...(isCreate ? { password } : {}),
         status: form.status,
       })
+      if (!isCreate && form.id && password) {
+        await platformApi.setUserPassword(form.id, password)
+      }
+      if (mirrorAccessEnabled && mirrorSourceUserId) {
+        await syncMirroredRLSRules(savedUser.id, mirrorSourceUserId)
+        await reloadData()
+      }
       toast.success(form.id ? 'Usuario atualizado.' : 'Usuario criado com sucesso.')
       setIsDialogOpen(false)
     } catch (error) {
@@ -234,12 +412,12 @@ export const UsersTable = () => {
   }
 
   const refreshPasswordSuggestion = () => {
-    setForm((current) => ({ ...current, password: buildSuggestedPassword(current.tenantId) }))
+    setForm((current) => ({ ...current, password: buildSuggestedPassword() }))
   }
 
   const copyPasswordToClipboard = async () => {
-    if (!form.password.trim()) return
-    await navigator.clipboard.writeText(form.password.trim())
+    if (!form.password) return
+    await navigator.clipboard.writeText(form.password)
     toast.success('Senha copiada para a area de transferencia.')
   }
 
@@ -326,7 +504,7 @@ export const UsersTable = () => {
             <Checkbox
               checked={checkedState}
               onCheckedChange={(checked) => {
-                const shouldCheck = Boolean(checked)
+                const shouldCheck = !!checked
                 setSelectedUserIds((current) =>
                   shouldCheck
                     ? [...new Set([...current, ...pageUserIds])]
@@ -342,7 +520,7 @@ export const UsersTable = () => {
             checked={selectedUserIds.includes(row.original.id)}
             onCheckedChange={(checked) =>
               setSelectedUserIds((current) =>
-                Boolean(checked)
+                checked === true
                   ? [...new Set([...current, row.original.id])]
                   : current.filter((id) => id !== row.original.id),
               )
@@ -389,11 +567,7 @@ export const UsersTable = () => {
         id: 'dashboards',
         header: 'Dashboards',
         cell: ({ row }) => {
-          const direct = row.original.dashboardIds ?? []
-          const fromGroups = groups
-            .filter((group) => (row.original.groupIds ?? []).includes(group.id))
-            .flatMap((group) => group.dashboards)
-          const names = [...new Set([...direct.map((id) => dashboardNameById.get(id) ?? id), ...fromGroups])]
+          const names = [...new Set((row.original.dashboardIds ?? []).map((id) => dashboardNameById.get(id) ?? id))]
           if (names.length === 0) return '-'
           return names.length <= 2 ? names.join(', ') : `${names[0]}, ${names[1]} +${names.length - 2}`
         },
@@ -571,7 +745,7 @@ export const UsersTable = () => {
       </Card>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{form.id ? 'Editar usuario' : 'Novo usuario'}</DialogTitle>
             <DialogDescription>Gerencie perfil, grupo e tenant do usuario.</DialogDescription>
@@ -587,8 +761,8 @@ export const UsersTable = () => {
                       ...current,
                       tenantId: value,
                       groupIds: [],
-                      dashboardIds: [],
-                      password: current.id ? current.password : buildSuggestedPassword(value),
+                      blockedDashboardIds: [],
+                      password: current.id ? current.password : buildSuggestedPassword(),
                     }))
                   }
                 >
@@ -660,8 +834,8 @@ export const UsersTable = () => {
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
                 {form.id
-                  ? 'Voce pode visualizar ou trocar a senha. Use 6 digitos numericos.'
-                  : 'Sugestao automatica: senha numerica de 6 digitos.'}
+                  ? 'Voce pode visualizar ou trocar a senha. Use no minimo 6 caracteres com letras e numeros.'
+                  : 'Sugestao automatica: senha com no minimo 6 caracteres, incluindo letras e numeros.'}
               </p>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
@@ -691,7 +865,50 @@ export const UsersTable = () => {
                 </Select>
               </div>
             </div>
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-3">
+              <div className="flex items-start gap-3">
+                <Checkbox
+                  id="mirror-access"
+                  checked={mirrorAccessEnabled}
+                  onCheckedChange={(checked) => {
+                    const isChecked = checked === true
+                    setMirrorAccessEnabled(isChecked)
+                    if (!isChecked) {
+                      setMirrorSourceUserId('')
+                    }
+                  }}
+                  className="mt-0.5"
+                />
+                <div className="min-w-0 flex-1">
+                  <label htmlFor="mirror-access" className="text-sm font-medium text-slate-700">
+                    Espelhar acessos de outro usuario
+                  </label>
+                  {mirrorAccessEnabled ? (
+                    <div className="mt-3">
+                      <SearchableSelect
+                        value={mirrorSourceUserId}
+                        onValueChange={applyMirroredAccess}
+                        options={mirrorSourceOptions}
+                        placeholder={
+                          mirrorSourceOptions.length > 0
+                            ? 'Selecione o usuario base'
+                            : 'Nenhum usuario elegivel neste tenant'
+                        }
+                        searchPlaceholder="Pesquisar usuario"
+                        emptyMessage="Nenhum usuario encontrado."
+                        disabled={mirrorSourceOptions.length === 0}
+                        triggerClassName="h-11 bg-white"
+                      />
+                      {mirrorSourceUser ? (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          Base selecionada: {mirrorSourceUser.firstName} {mirrorSourceUser.lastName}. Voce ainda pode ajustar grupos e dashboards antes de salvar.
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
               <div>
                 <label className="text-sm font-medium text-slate-700">Grupos (multiplos)</label>
                 <div className="mt-1">
@@ -705,21 +922,36 @@ export const UsersTable = () => {
                     disabled={groupOptions.length === 0}
                   />
                 </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Selecione os grupos do usuario. O campo abaixo vai listar apenas os dashboards herdados desses grupos.
+                </p>
               </div>
 
               <div>
-                <label className="text-sm font-medium text-slate-700">Dashboards (acesso direto)</label>
+                <label className="text-sm font-medium text-slate-700">Dashboards visiveis para o usuario</label>
                 <div className="mt-1">
                   <MultiSelectDropdown
-                    values={form.dashboardIds}
-                    onChange={(values) => setForm((current) => ({ ...current, dashboardIds: values }))}
-                    options={dashboardOptions.map((dashboard) => ({ value: dashboard.id, label: dashboard.name }))}
-                    placeholder={dashboardOptions.length > 0 ? 'Selecione dashboards' : 'Nenhum dashboard disponivel'}
+                    values={visibleInheritedDashboardIds}
+                    onChange={(values) =>
+                      setForm((current) => ({
+                        ...current,
+                        blockedDashboardIds: inheritedDashboardIds.filter((dashboardId) => !values.includes(dashboardId)),
+                      }))
+                    }
+                    options={inheritedDashboardOptions.map((dashboard) => ({ value: dashboard.id, label: dashboard.name }))}
+                    placeholder={
+                      inheritedDashboardOptions.length > 0
+                        ? 'Selecione os dashboards visiveis'
+                        : 'Selecione grupos para listar os dashboards'
+                    }
                     searchPlaceholder="Pesquisar dashboard"
-                    emptyMessage="Nenhum dashboard encontrado."
-                    disabled={dashboardOptions.length === 0}
+                    emptyMessage="Nenhum dashboard herdado encontrado."
+                    disabled={inheritedDashboardOptions.length === 0}
                   />
                 </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Todos os dashboards herdados pelos grupos entram marcados. Para retirar acesso, basta desmarcar.
+                </p>
               </div>
             </div>
           </div>

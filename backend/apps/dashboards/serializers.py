@@ -16,7 +16,7 @@ class DashboardColumnSerializer(serializers.ModelSerializer):
 class DashboardSerializer(serializers.ModelSerializer):
     tenant_name = serializers.CharField(source='tenant.name', read_only=True)
     workspace_name = serializers.CharField(source='workspace.name', read_only=True)
-    columns = DashboardColumnSerializer(many=True, read_only=True)
+    views_7d = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Dashboard
@@ -38,7 +38,7 @@ class DashboardSerializer(serializers.ModelSerializer):
             'last_sync_at',
             'refresh_schedule',
             'tags',
-            'columns',
+            'views_7d',
             'created_at',
             'updated_at',
         ]

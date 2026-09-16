@@ -57,3 +57,8 @@ class DashboardColumn(UUIDTimeStampedModel):
     def __str__(self) -> str:
         return f'{self.dashboard.name} - {self.label}'
 
+
+class PythonDashboardDataset(UUIDTimeStampedModel):
+    tenant = models.OneToOneField('tenants.Tenant', on_delete=models.CASCADE, related_name='python_dashboard_dataset')
+    data = models.JSONField()
+

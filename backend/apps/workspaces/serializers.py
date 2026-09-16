@@ -6,7 +6,7 @@ from apps.workspaces.models import Workspace
 
 class WorkspaceSerializer(serializers.ModelSerializer):
     tenant_name = serializers.CharField(source='tenant.name', read_only=True)
-    dashboards_count = serializers.SerializerMethodField()
+    dashboards_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Workspace
@@ -26,9 +26,6 @@ class WorkspaceSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             'tenant': {'required': False},
         }
-
-    def get_dashboards_count(self, obj):
-        return obj.dashboards.count()
 
     def validate_tenant(self, tenant):
         request = self.context.get('request')

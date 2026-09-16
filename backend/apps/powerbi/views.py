@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+from django.db import transaction
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -29,6 +30,42 @@ class PowerBIConnectionViewSet(viewsets.ModelViewSet):
     ordering = ['tenant__name']
     supported_name_conflicts = {'Abort', 'Ignore', 'Overwrite', 'CreateOrOverwrite'}
 
+    def _filter_connection_workspaces(self, connection, workspaces):
+        default_workspace_id = str(connection.default_workspace_id or '').strip()
+        if not default_workspace_id:
+            return workspaces
+        return [
+            workspace
+            for workspace in workspaces
+            if str(workspace.get('id') or '').strip() == default_workspace_id
+        ]
+
+    def _ensure_workspace_allowed(self, connection, workspace_id):
+        default_workspace_id = str(connection.default_workspace_id or '').strip()
+        workspace_id = str(workspace_id or '').strip()
+        if default_workspace_id and workspace_id != default_workspace_id:
+            return Response(
+                {
+                    'detail': (
+                        'Esta conexao esta restrita ao workspace padrao configurado. '
+                        'Atualize o Default workspace ID da conexao para operar em outro workspace.'
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return None
+
+    def _delete_orphan_dashboards(self, connection, workspace, active_report_ids):
+        orphan_dashboards = Dashboard.objects.filter(
+            tenant=connection.tenant,
+            workspace=workspace,
+        ).exclude(report_id='').exclude(report_id__in=sorted(active_report_ids))
+        deleted_count = orphan_dashboards.count()
+        deleted_names = list(orphan_dashboards.values_list('name', flat=True)[:20])
+        if deleted_count:
+            orphan_dashboards.delete()
+        return deleted_count, deleted_names
+
     def get_queryset(self):
         queryset = PowerBIConnection.objects.select_related('tenant')
         return apply_tenant_scope(queryset, self.request.user)
@@ -45,7 +82,7 @@ class PowerBIConnectionViewSet(viewsets.ModelViewSet):
         client = PowerBIClient(connection)
 
         try:
-            workspaces = client.list_workspaces()
+            workspaces = self._filter_connection_workspaces(connection, client.list_workspaces())
             connection.last_tested_at = timezone.now()
             connection.last_error = ''
             connection.save(update_fields=['last_tested_at', 'last_error', 'updated_at'])
@@ -66,7 +103,7 @@ class PowerBIConnectionViewSet(viewsets.ModelViewSet):
         connection = self.get_object()
         client = PowerBIClient(connection)
         try:
-            workspaces = client.list_workspaces()
+            workspaces = self._filter_connection_workspaces(connection, client.list_workspaces())
             result = [
                 {
                     'id': workspace.get('id'),
@@ -86,6 +123,9 @@ class PowerBIConnectionViewSet(viewsets.ModelViewSet):
         workspace_id = request.query_params.get('workspace_id')
         if not workspace_id:
             return Response({'detail': 'workspace_id e obrigatorio.'}, status=status.HTTP_400_BAD_REQUEST)
+        denied_response = self._ensure_workspace_allowed(connection, workspace_id)
+        if denied_response:
+            return denied_response
 
         client = PowerBIClient(connection)
         try:
@@ -104,12 +144,93 @@ class PowerBIConnectionViewSet(viewsets.ModelViewSet):
         except PowerBIServiceError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
+    @action(detail=True, methods=['post'], url_path='delete-report')
+    def delete_report(self, request, pk=None):
+        connection = self.get_object()
+        workspace_id = str(request.data.get('workspace_id') or '').strip()
+        report_id = str(request.data.get('report_id') or '').strip()
+
+        if not workspace_id or not report_id:
+            return Response(
+                {'detail': 'workspace_id e report_id sao obrigatorios.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        denied_response = self._ensure_workspace_allowed(connection, workspace_id)
+        if denied_response:
+            return denied_response
+
+        client = PowerBIClient(connection)
+        try:
+            report = client.get_report(workspace_id, report_id)
+            report_name = str(report.get('name') or '').strip()
+            dataset_id = str(report.get('datasetId') or '').strip()
+
+            client.delete_report(workspace_id, report_id)
+
+            dataset_deleted = not dataset_id
+            dataset_error = ''
+            if dataset_id:
+                try:
+                    client.delete_dataset(workspace_id, dataset_id)
+                    dataset_deleted = True
+                except PowerBIServiceError as exc:
+                    dataset_error = str(exc)
+
+            local_dashboards = Dashboard.objects.filter(
+                tenant=connection.tenant,
+                workspace__external_workspace_id=workspace_id,
+                report_id=report_id,
+            )
+            deleted_local = local_dashboards.count()
+            deleted_names = list(local_dashboards.values_list('name', flat=True)[:10])
+            if deleted_local:
+                local_dashboards.delete()
+
+            connection.last_sync_at = timezone.now()
+            connection.last_error = dataset_error
+            connection.save(update_fields=['last_sync_at', 'last_error', 'updated_at'])
+
+            detail = (
+                'Relatorio e modelo semantico excluidos com sucesso do Power BI e removidos da plataforma.'
+                if dataset_deleted
+                else (
+                    'O relatorio foi excluido e removido da plataforma, mas nao foi possivel excluir o modelo '
+                    f'semantico vinculado: {dataset_error}'
+                )
+            )
+
+            return Response(
+                {
+                    'detail': detail,
+                    'fullyDeleted': dataset_deleted,
+                    'reportId': report_id,
+                    'reportName': report_name,
+                    'datasetId': dataset_id,
+                    'datasetDeleted': dataset_deleted,
+                    'datasetError': dataset_error,
+                    'deletedLocal': deleted_local,
+                    'deletedNames': deleted_names,
+                }
+            )
+        except PowerBIServiceError as exc:
+            connection.last_error = str(exc)
+            connection.save(update_fields=['last_error', 'updated_at'])
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:  # noqa: BLE001
+            connection.last_error = str(exc)
+            connection.save(update_fields=['last_error', 'updated_at'])
+            return Response({'detail': 'Erro interno ao excluir dashboard do Power BI.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
     @action(detail=True, methods=['get'], url_path='datasets')
     def list_datasets(self, request, pk=None):
         connection = self.get_object()
         workspace_id = request.query_params.get('workspace_id')
         if not workspace_id:
             return Response({'detail': 'workspace_id e obrigatorio.'}, status=status.HTTP_400_BAD_REQUEST)
+        denied_response = self._ensure_workspace_allowed(connection, workspace_id)
+        if denied_response:
+            return denied_response
 
         client = PowerBIClient(connection)
         try:
@@ -133,7 +254,7 @@ class PowerBIConnectionViewSet(viewsets.ModelViewSet):
         client = PowerBIClient(connection)
 
         try:
-            workspaces = client.list_workspaces()
+            workspaces = self._filter_connection_workspaces(connection, client.list_workspaces())
             synced = 0
             for workspace in workspaces:
                 external_id = str(workspace.get('id', ''))
@@ -164,75 +285,84 @@ class PowerBIConnectionViewSet(viewsets.ModelViewSet):
         workspace_id = request.data.get('workspace_id')
         if not workspace_id:
             return Response({'detail': 'workspace_id e obrigatorio.'}, status=status.HTTP_400_BAD_REQUEST)
+        denied_response = self._ensure_workspace_allowed(connection, workspace_id)
+        if denied_response:
+            return denied_response
 
         category = request.data.get('category', 'Operacional')
         status_value = request.data.get('status', DashboardStatus.DRAFT)
         client = PowerBIClient(connection)
 
         try:
-            workspace_response = client.list_workspaces()
-            workspace_name = next(
-                (workspace.get('name') for workspace in workspace_response if str(workspace.get('id')) == workspace_id),
-                'Workspace importado',
-            )
-            workspace, _ = Workspace.objects.update_or_create(
-                tenant=connection.tenant,
-                external_workspace_id=workspace_id,
-                defaults={
-                    'name': workspace_name,
-                    'status': WorkspaceStatus.ACTIVE,
-                },
-            )
-
-            reports = client.list_reports(workspace_id)
-            created = 0
-            updated = 0
-            skipped_by_limit = 0
-            max_dashboards = connection.tenant.max_dashboards
-            tenant_dashboards_count = Dashboard.objects.filter(tenant=connection.tenant).count()
-            for report in reports:
-                report_id = str(report.get('id', ''))
-                if not report_id:
-                    continue
-                name = report.get('name') or f'Report {report_id[:6]}'
-                defaults = {
-                    'workspace': workspace,
-                    'name': name,
-                    'description': '',
-                    'category': category,
-                    'status': status_value,
-                    'embed_url': report.get('embedUrl') or '',
-                    'dataset_id': report.get('datasetId') or '',
-                    'external_workspace_id': workspace.external_workspace_id,
-                }
-                dashboard = Dashboard.objects.filter(tenant=connection.tenant, report_id=report_id).first()
-                if dashboard:
-                    for attr, value in defaults.items():
-                        setattr(dashboard, attr, value)
-                    dashboard.save()
-                    updated += 1
-                    continue
-
-                dashboard = Dashboard.objects.filter(tenant=connection.tenant, name=name).first()
-                if dashboard:
-                    for attr, value in defaults.items():
-                        setattr(dashboard, attr, value)
-                    dashboard.report_id = report_id
-                    dashboard.save()
-                    updated += 1
-                    continue
-
-                if tenant_dashboards_count >= max_dashboards:
-                    skipped_by_limit += 1
-                    continue
-
-                Dashboard.objects.create(
-                    tenant=connection.tenant,
-                    report_id=report_id,
-                    **defaults,
+            with transaction.atomic():
+                workspace_response = self._filter_connection_workspaces(connection, client.list_workspaces())
+                workspace_name = next(
+                    (workspace.get('name') for workspace in workspace_response if str(workspace.get('id')) == workspace_id),
+                    'Workspace importado',
                 )
-                created += 1
-                tenant_dashboards_count += 1
+                workspace, _ = Workspace.objects.update_or_create(
+                    tenant=connection.tenant,
+                    external_workspace_id=workspace_id,
+                    defaults={
+                        'name': workspace_name,
+                        'status': WorkspaceStatus.ACTIVE,
+                    },
+                )
+
+                reports = client.list_reports(workspace_id)
+                created = 0
+                updated = 0
+                skipped_by_limit = 0
+                active_report_ids: set[str] = set()
+                max_dashboards = connection.tenant.max_dashboards
+                tenant_dashboards_count = Dashboard.objects.filter(tenant=connection.tenant).count()
+                for report in reports:
+                    report_id = str(report.get('id', '')).strip()
+                    if not report_id:
+                        continue
+                    active_report_ids.add(report_id)
+                    name = (report.get('name') or f'Report {report_id[:6]}').strip()
+                    defaults = {
+                        'workspace': workspace,
+                        'name': name,
+                        'description': '',
+                        'category': category,
+                        'status': status_value,
+                        'embed_url': report.get('embedUrl') or '',
+                        'dataset_id': report.get('datasetId') or '',
+                        'external_workspace_id': workspace.external_workspace_id,
+                        'last_sync_at': timezone.now(),
+                    }
+                    dashboard = Dashboard.objects.filter(tenant=connection.tenant, report_id=report_id).first()
+                    if dashboard:
+                        for attr, value in defaults.items():
+                            setattr(dashboard, attr, value)
+                        dashboard.save()
+                        updated += 1
+                        continue
+
+                    dashboard = Dashboard.objects.filter(tenant=connection.tenant, name=name).first()
+                    if dashboard:
+                        for attr, value in defaults.items():
+                            setattr(dashboard, attr, value)
+                        dashboard.report_id = report_id
+                        dashboard.save()
+                        updated += 1
+                        continue
+
+                    if tenant_dashboards_count >= max_dashboards:
+                        skipped_by_limit += 1
+                        continue
+
+                    Dashboard.objects.create(
+                        tenant=connection.tenant,
+                        report_id=report_id,
+                        **defaults,
+                    )
+                    created += 1
+                    tenant_dashboards_count += 1
+
+                deleted, deleted_names = self._delete_orphan_dashboards(connection, workspace, active_report_ids)
 
             connection.last_sync_at = timezone.now()
             connection.last_error = ''
@@ -242,6 +372,8 @@ class PowerBIConnectionViewSet(viewsets.ModelViewSet):
                     'detail': 'Reports sincronizados com sucesso.',
                     'created': created,
                     'updated': updated,
+                    'deleted': deleted,
+                    'deleted_names': deleted_names,
                     'skipped_by_limit': skipped_by_limit,
                     'limit': max_dashboards,
                 }
@@ -261,6 +393,9 @@ class PowerBIConnectionViewSet(viewsets.ModelViewSet):
         workspace_id = str(request.data.get('workspace_id') or connection.default_workspace_id or '').strip()
         if not workspace_id:
             return Response({'detail': 'workspace_id e obrigatorio.'}, status=status.HTTP_400_BAD_REQUEST)
+        denied_response = self._ensure_workspace_allowed(connection, workspace_id)
+        if denied_response:
+            return denied_response
 
         pbix_file = request.FILES.get('pbix_file') or request.FILES.get('file')
         if not pbix_file:
@@ -301,7 +436,7 @@ class PowerBIConnectionViewSet(viewsets.ModelViewSet):
 
         client = PowerBIClient(connection)
         try:
-            workspace_response = client.list_workspaces()
+            workspace_response = self._filter_connection_workspaces(connection, client.list_workspaces())
             workspace_name = next(
                 (workspace.get('name') for workspace in workspace_response if str(workspace.get('id')) == workspace_id),
                 'Workspace importado',
