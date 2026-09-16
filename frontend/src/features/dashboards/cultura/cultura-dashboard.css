@@ -1,0 +1,51 @@
+.cultura-dashboard {
+  min-width: 0;
+  overflow-x: auto;
+  border: 1px solid hsl(var(--border) / 0.6);
+  border-radius: 1rem;
+  background: hsl(var(--background));
+  box-shadow: var(--shadow-card);
+}
+
+.cultura-dashboard h1 {
+  font-size: 1.45rem !important;
+  font-weight: 600 !important;
+}
+
+.cultura-dashboard h2,
+.cultura-dashboard h3 {
+  font-weight: 600 !important;
+}
+
+.cultura-dashboard button {
+  border-radius: 0.75rem !important;
+  transition: background-color 150ms, box-shadow 150ms;
+}
+
+.cultura-dashboard button:focus-visible,
+.cultura-dashboard select:focus-visible,
+.cultura-dashboard input:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+.cultura-dashboard select {
+  min-height: 2.5rem;
+  max-width: 100%;
+  border-radius: 0.7rem !important;
+}
+
+.cultura-dashboard div[style*="border-radius: 10px"] {
+  border-radius: 1rem !important;
+  box-shadow: var(--shadow-card);
+}
+
+.cultura-dashboard div[style*="max-width"][style*="margin: 0px auto"] {
+  max-width: 100% !important;
+}
+
+@media (max-width: 768px) {
+  .cultura-dashboard div[style*="grid-template-columns"] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}

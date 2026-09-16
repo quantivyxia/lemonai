@@ -193,6 +193,12 @@ MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'users.User'
 
+# Stable tenant identifier, verified against the existing Cultura Inglesa account.
+# A display-name change must never grant another tenant access to this dataset.
+CULTURA_INGLESA_TENANT_ID = os.getenv(
+    'CULTURA_INGLESA_TENANT_ID', '49223339-2c25-430a-94d2-f88456bfcdc1'
+)
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'apps.authentication.auth.ViewAsJWTAuthentication',
