@@ -18,7 +18,7 @@
   transition: width 180ms ease, box-shadow 180ms ease;
 }
 
-.sidebar-desktop:is(:hover, :focus-within) {
+.sidebar-desktop:not([data-collapsed-after-navigation]):is(:hover, :focus-within) {
   width: 284px;
   box-shadow: 12px 0 28px rgb(15 23 42 / 12%);
 }
@@ -33,7 +33,7 @@
   opacity: 0;
 }
 
-.sidebar-desktop:is(:hover, :focus-within) .sidebar-label {
+.sidebar-desktop:not([data-collapsed-after-navigation]):is(:hover, :focus-within) .sidebar-label {
   visibility: visible;
   opacity: 1;
 }
@@ -53,7 +53,8 @@
   width: 220px;
 }
 
-.sidebar-desktop:not(:hover):not(:focus-within) .sidebar-monogram {
+.sidebar-desktop:not(:hover):not(:focus-within) .sidebar-monogram,
+.sidebar-desktop[data-collapsed-after-navigation] .sidebar-monogram {
   position: absolute;
   inset: 0;
   display: grid;

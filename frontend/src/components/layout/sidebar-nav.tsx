@@ -16,7 +16,7 @@ import {
   UsersRound,
   Workflow,
 } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 
 import { Badge } from '@/components/ui/badge'
@@ -57,7 +57,13 @@ const secondaryNav: NavItem[] = [
   { label: 'Configuracoes', path: '/settings/platform', icon: Compass },
 ]
 
-export const SidebarNav = ({ mobile = false }: { mobile?: boolean }) => {
+export const SidebarNav = ({ mobile = false, onNavigate }: { mobile?: boolean; onNavigate?: () => void }) => {
+  const [collapsedAfterNavigation, setCollapsedAfterNavigation] = useState(false)
+  const handleNavigate = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
+    setCollapsedAfterNavigation(true)
+    onNavigate?.()
+  }
   const location = useLocation()
   const { user } = useAuth()
   const { brandings } = usePlatformStore()
@@ -116,12 +122,15 @@ export const SidebarNav = ({ mobile = false }: { mobile?: boolean }) => {
   return (
     <div className={mobile ? 'h-full' : 'sidebar-rail hidden lg:block'}>
     <aside
+      data-collapsed-after-navigation={collapsedAfterNavigation || undefined}
+      onMouseEnter={() => setCollapsedAfterNavigation(false)}
+      onFocusCapture={() => setCollapsedAfterNavigation(false)}
       className={cn(
         'w-full flex-col bg-white px-4 py-5',
         mobile ? 'flex h-full' : 'sidebar-desktop flex border-r border-border/70',
       )}
     >
-      <Link to="/" aria-label={portalName} className="sidebar-brand mb-8 block rounded-2xl bg-gradient-to-r from-primary/10 via-primary/15 to-teal-100/70 px-4 py-4">
+      <Link onClick={handleNavigate} to="/" aria-label={portalName} className="sidebar-brand mb-8 block rounded-2xl bg-gradient-to-r from-primary/10 via-primary/15 to-teal-100/70 px-4 py-4">
         <span aria-hidden="true" className="sidebar-monogram">{portalName.slice(0, 1)}</span>
         <div className="sidebar-label font-display text-xl font-semibold text-slate-900">{portalName}</div>
         <p className="sidebar-label mt-1 text-xs font-medium text-slate-600">Embedded Intelligence Portal</p>
@@ -134,6 +143,7 @@ export const SidebarNav = ({ mobile = false }: { mobile?: boolean }) => {
           return (
             <Link
               key={item.path}
+              onClick={handleNavigate}
               to={item.path}
               aria-label={item.label}
               aria-current={isActive ? 'page' : undefined}
@@ -164,6 +174,7 @@ export const SidebarNav = ({ mobile = false }: { mobile?: boolean }) => {
           return (
             <Link
               key={item.path}
+              onClick={handleNavigate}
               to={item.path}
               aria-label={item.label}
               aria-current={isActive ? 'page' : undefined}

@@ -94,7 +94,7 @@ export const AppShell = () => {
                   <X className="h-4 w-4" />
                 </Button>
               </div>
-              <SidebarNav mobile />
+              <SidebarNav mobile onNavigate={() => setIsMobileSidebarOpen(false)} />
             </motion.div>
             <button
               className="flex-1"
