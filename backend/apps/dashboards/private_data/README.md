@@ -40,3 +40,20 @@ database, never the production Supabase instance.
 Deployment requires both backend and frontend, migration 0003, and a populated
 Cultura Inglesa dataset row. Neither GitHub source nor deployment artifacts contain
 the original data. The frontend build contains rendering code only.
+
+## Data-only HTML updates
+
+To replace the existing record sets and branch metadata using a newer private
+HTML export, keeping the current calculation rules and UI:
+
+```text
+node frontend/scripts/update-cultura-data.cjs "<private HTML path>"
+node frontend/scripts/update-cultura-data.cjs "<private HTML path>" --check
+```
+
+The parser extracts literal values without executing the HTML. It does not import
+new screens or calculation rules. The original JSX generator checks the original
+snapshot only; use the HTML check above after a data update. Before updating the
+production row, save its existing JSON privately and verify it has not changed
+since the backup. Update only the configured Cultura tenant in a transaction and
+verify exact equality after writing. Keep all snapshots outside Git.

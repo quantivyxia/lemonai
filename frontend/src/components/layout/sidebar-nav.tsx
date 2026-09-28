@@ -1,3 +1,5 @@
+import './sidebar-nav.css'
+
 import {
   BarChart3,
   Building2,
@@ -112,15 +114,17 @@ export const SidebarNav = ({ mobile = false }: { mobile?: boolean }) => {
       : tenantPortalName || user?.tenantName || 'LemonAI'
 
   return (
+    <div className={mobile ? 'h-full' : 'sidebar-rail hidden lg:block'}>
     <aside
       className={cn(
         'w-full flex-col bg-white px-4 py-5',
-        mobile ? 'flex h-full' : 'hidden w-[284px] border-r border-border/70 lg:flex',
+        mobile ? 'flex h-full' : 'sidebar-desktop flex border-r border-border/70',
       )}
     >
-      <Link to="/" className="mb-8 block rounded-2xl bg-gradient-to-r from-primary/10 via-primary/15 to-teal-100/70 px-4 py-4">
-        <div className="font-display text-xl font-semibold text-slate-900">{portalName}</div>
-        <p className="mt-1 text-xs font-medium text-slate-600">Embedded Intelligence Portal</p>
+      <Link to="/" aria-label={portalName} className="sidebar-brand mb-8 block rounded-2xl bg-gradient-to-r from-primary/10 via-primary/15 to-teal-100/70 px-4 py-4">
+        <span aria-hidden="true" className="sidebar-monogram">{portalName.slice(0, 1)}</span>
+        <div className="sidebar-label font-display text-xl font-semibold text-slate-900">{portalName}</div>
+        <p className="sidebar-label mt-1 text-xs font-medium text-slate-600">Embedded Intelligence Portal</p>
       </Link>
 
       <nav className="space-y-1.5">
@@ -131,18 +135,20 @@ export const SidebarNav = ({ mobile = false }: { mobile?: boolean }) => {
             <Link
               key={item.path}
               to={item.path}
+              aria-label={item.label}
+              aria-current={isActive ? 'page' : undefined}
               className={cn(
-                'group flex items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
+                'sidebar-link group flex items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
                 isActive
                   ? 'bg-primary/10 text-primary'
                   : 'text-slate-600 hover:bg-muted/60 hover:text-slate-900',
               )}
             >
               <span className="flex items-center gap-3">
-                <Icon className={cn('h-[18px] w-[18px]', isActive ? 'text-primary' : 'text-slate-500 group-hover:text-slate-700')} />
-                {item.label}
+                <Icon className={cn('h-[18px] w-[18px] shrink-0', isActive ? 'text-primary' : 'text-slate-500 group-hover:text-slate-700')} />
+                <span className="sidebar-label">{item.label}</span>
               </span>
-              {item.badge ? <Badge variant="neutral">{item.badge}</Badge> : null}
+              {item.badge ? <span className="sidebar-label"><Badge variant="neutral">{item.badge}</Badge></span> : null}
             </Link>
           )
         })}
@@ -159,18 +165,20 @@ export const SidebarNav = ({ mobile = false }: { mobile?: boolean }) => {
             <Link
               key={item.path}
               to={item.path}
+              aria-label={item.label}
+              aria-current={isActive ? 'page' : undefined}
               className={cn(
-                'group flex items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
+                'sidebar-link group flex items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
                 isActive
                   ? 'bg-primary/10 text-primary'
                   : 'text-slate-600 hover:bg-muted/60 hover:text-slate-900',
               )}
             >
               <span className="flex items-center gap-3">
-                <Icon className={cn('h-[18px] w-[18px]', isActive ? 'text-primary' : 'text-slate-500 group-hover:text-slate-700')} />
-                {item.label}
+                <Icon className={cn('h-[18px] w-[18px] shrink-0', isActive ? 'text-primary' : 'text-slate-500 group-hover:text-slate-700')} />
+                <span className="sidebar-label">{item.label}</span>
               </span>
-              <span className="flex items-center gap-2">
+              <span className="sidebar-label flex items-center gap-2">
                 {item.badge ? <Badge variant="default">{item.badge}</Badge> : null}
                 {showUnreadBadge ? (
                   unreadCount > 1 ? (
@@ -187,5 +195,6 @@ export const SidebarNav = ({ mobile = false }: { mobile?: boolean }) => {
         })}
       </nav>
     </aside>
+    </div>
   )
 }

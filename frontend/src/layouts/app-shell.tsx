@@ -29,7 +29,7 @@ export const AppShell = () => {
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#ebf3ff_0%,#f3f6fb_33%,#f5f7fb_65%,#f3f6fb_100%)]">
       <div className={isDashboardViewRoute ? 'mx-auto flex w-full max-w-none' : 'mx-auto flex max-w-[1880px]'}>
         <SidebarNav />
-        <div className="flex min-h-screen flex-1 flex-col">
+        <div className="flex min-h-screen min-w-0 flex-1 flex-col">
           <Topbar onMobileMenuOpen={() => setIsMobileSidebarOpen(true)} />
           {isViewAsMode && user ? (
             <div className="border-b border-amber-200 bg-amber-50/85 px-4 py-3 backdrop-blur sm:px-6">
