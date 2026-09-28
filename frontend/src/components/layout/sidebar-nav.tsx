@@ -131,7 +131,9 @@ export const SidebarNav = ({ mobile = false, onNavigate }: { mobile?: boolean; o
       )}
     >
       <Link onClick={handleNavigate} to="/" aria-label={portalName} className="sidebar-brand mb-8 block rounded-2xl bg-gradient-to-r from-primary/10 via-primary/15 to-teal-100/70 px-4 py-4">
-        <span aria-hidden="true" className="sidebar-monogram">{portalName.slice(0, 1)}</span>
+        <span aria-hidden="true" className="sidebar-monogram">
+          <img src="/favicon.svg" alt="" className="h-9 w-9 object-contain" />
+        </span>
         <div className="sidebar-label font-display text-xl font-semibold text-slate-900">{portalName}</div>
         <p className="sidebar-label mt-1 text-xs font-medium text-slate-600">Embedded Intelligence Portal</p>
       </Link>
