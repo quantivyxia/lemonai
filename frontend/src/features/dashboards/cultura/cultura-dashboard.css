@@ -71,9 +71,9 @@
   background: hsl(var(--card));
   box-shadow: var(--shadow-card);
 }
-.cultura-filters > div:has(select) { flex: 1 1 145px; min-width: 0; }
+.cultura-filters > div:has(select, input, button) { flex: 1 1 145px; min-width: 0; }
 .cultura-filter-label { display: block; margin-bottom: 7px; color: hsl(var(--muted-foreground)); font-size: 12px; font-weight: 600; }
-.cultura-filters > div:not(:has(select)) { flex: 1 0 100%; margin-left: 0 !important; padding-top: 12px; border-top: 1px solid hsl(var(--border) / .5); overflow-wrap: anywhere; }
+.cultura-filters > div:not(:has(select, input, button)) { flex: 1 0 100%; margin-left: 0 !important; padding-top: 12px; border-top: 1px solid hsl(var(--border) / .5); overflow-wrap: anywhere; }
 .cultura-dashboard select {
   min-height: 40px;
   max-width: 100%;
@@ -144,7 +144,7 @@
   .cultura-nav-button { min-height: 40px; padding: 10px 12px; }
   .cultura-dashboard h1 { font-size: 20px !important; }
   .cultura-filters { gap: 14px; padding: 16px; }
-  .cultura-filters > div:has(select) { flex-basis: calc(50% - 14px); }
+  .cultura-filters > div:has(select, input, button) { flex-basis: calc(50% - 14px); }
   .cultura-card { padding: 16px; }
   .cultura-dashboard div[style*="grid-template-columns"] { grid-template-columns: minmax(0, 1fr) !important; }
   .cultura-metrics-rail { grid-template-columns: minmax(0, 1fr); }
@@ -155,3 +155,9 @@
 @media (prefers-reduced-motion: reduce) {
   .cultura-dashboard button { transition: none; }
 }
+.cultura-subnav-button { border: 1px solid hsl(var(--border)); color: hsl(var(--muted-foreground)); background: hsl(var(--card)); }
+.cultura-subnav-button[aria-pressed="true"] { border-color: hsl(var(--primary) / .2); color: hsl(var(--primary)); background: hsl(var(--primary) / .08); }
+.cultura-filters button { min-height: 40px; border-radius: 10px !important; }
+.cultura-filters > div:has(button) > div { max-width: 100%; }
+.cultura-filters input:not([type="checkbox"]) { min-width: 0 !important; width: 100%; max-width: 100%; }
+.cultura-dashboard div[style*="flex:"] { min-width: 0; }

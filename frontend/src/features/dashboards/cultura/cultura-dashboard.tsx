@@ -16,9 +16,11 @@ export const CulturaDashboard = () => {
     setError(null)
     void Promise.all([
       apiRequest<Record<string, unknown>>('/dashboards/python/cultura-inglesa/', { cache: 'no-store' }),
-      import('./cultura-viewer.jsx'),
+      import('./cultura-final.jsx'),
     ]).then(([dataset, { createCulturaDashboard }]) => {
-      if (!cancelled) setViewer(() => createCulturaDashboard(dataset))
+      const finalDataset = dataset.__cultura_final as Record<string, unknown> | undefined
+      if (!finalDataset) throw new Error('A versão final do dashboard ainda não está disponível. Tente novamente.')
+      if (!cancelled) setViewer(() => createCulturaDashboard(finalDataset))
     }).catch((cause: unknown) => {
       if (!cancelled) setError(cause instanceof Error ? cause.message : 'Nao foi possivel carregar o dashboard.')
     })

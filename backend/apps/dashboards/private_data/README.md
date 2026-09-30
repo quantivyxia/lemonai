@@ -71,3 +71,26 @@ data snapshot against the original source. Use the data-only HTML check above
 to validate that snapshot. Browser regression checks compare all seven views,
 filters, drill-down, import and rateio controls against the original renderer
 with the same current data; only letter case and whitespace are normalized.
+## Complete final HTML integration
+
+The active viewer is `cultura-final.jsx`, generated from the user-supplied final
+HTML. It includes all ten views and fifteen validation subviews. Do not use the
+legacy JSX or data-only importer to regenerate this version.
+
+```text
+node frontend/scripts/import-cultura-final.cjs "<private final HTML path>"
+node frontend/scripts/import-cultura-final.cjs "<private final HTML path>" --check
+```
+
+The importer parses literals without executing the supplied scripts, extracts all
+static data/configuration into ignored `cultura_final.json`, and preserves the
+original functions verbatim. `cultura-element.jsx` applies Lemon styling at the
+React element boundary; it does not change calculations or event handlers.
+
+Production stores the final snapshot under `__cultura_final` in the existing
+protected Cultura dataset row. Older top-level data remains for compatibility
+with already-open clients and rollback; the new viewer uses only the final
+snapshot. Publish data first, then the new frontend. Back up the complete row
+privately and compare it under a row lock before updating. No extra public table,
+policy or static data asset is introduced. Employee, payroll, benefit and vacation
+data must never be committed or bundled into frontend assets.
