@@ -23,7 +23,9 @@ imports and rule controls retain their original behavior and are not persisted.
 
 The original component did not define `StatCard`. A presentation-only adapter
 displays the existing `label`, `valor`, `sub` and `cor` props. Theme tokens and
-scoped CSS adapt the visual appearance; calculation and JSX bodies are unchanged.
+scoped CSS adapt the visual appearance. The presentation transform in
+`frontend/scripts/refine-cultura-viewer.cjs` adds layout classes, navigation icons
+and chart colors; calculations, data bindings and event handlers are preserved.
 
 Recreate or check the adaptation from the repository root:
 
@@ -57,3 +59,15 @@ snapshot only; use the HTML check above after a data update. Before updating the
 production row, save its existing JSON privately and verify it has not changed
 since the backup. Update only the configured Cultura tenant in a transaction and
 verify exact equality after writing. Keep all snapshots outside Git.
+
+After importing a newer data snapshot, verify the viewer independently with:
+
+```text
+node frontend/scripts/import-cultura-dashboard.cjs --check-viewer
+```
+
+This checks the presentation transform without rewriting or comparing the newer
+data snapshot against the original source. Use the data-only HTML check above
+to validate that snapshot. Browser regression checks compare all seven views,
+filters, drill-down, import and rateio controls against the original renderer
+with the same current data; only letter case and whitespace are normalized.

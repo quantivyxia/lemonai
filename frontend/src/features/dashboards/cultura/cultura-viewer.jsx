@@ -3,6 +3,7 @@ import React, { useState, useMemo, useRef, useCallback } from "react";
 import * as XLSX from "xlsx";
 import {
   ChevronRight, ChevronDown, UploadCloud, RotateCcw, Info, FileSpreadsheet,
+  BarChart3, GitCompareArrows, Users, GraduationCap, BookOpen, SlidersHorizontal,
 } from "lucide-react";
 
 export function createCulturaDashboard(dataset) {
@@ -21,7 +22,7 @@ const MUTED = "#64748b";
 const POS = "#1B6B3C";
 const NEG = "#B3273E";
 const SERIF = "Sora, sans-serif";
-const MONO = '"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+const MONO = "Manrope, sans-serif";
 const SANS = "Manrope, sans-serif";
 
 // ---------------------------------------------------------------------------
@@ -229,7 +230,7 @@ function Select({ value, onChange, options, disabled, title }) {
 
 function FilterLabel({ children }) {
   return (
-    <span style={{ fontFamily: SANS, fontSize: 11, fontWeight: 700, color: MUTED, letterSpacing: 0.4, textTransform: "uppercase", marginRight: 6 }}>
+    <span className="cultura-filter-label">
       {children}
     </span>
   );
@@ -237,7 +238,7 @@ function FilterLabel({ children }) {
 
 function Card({ children, style }) {
   return (
-    <div style={{ background: CARD, border: `1px solid ${LINE}`, borderRadius: 10, padding: 22, ...style }}>
+    <div className="cultura-card" style={style}>
       {children}
     </div>
   );
@@ -402,13 +403,13 @@ function DreView({ title }) {
   const semestreOptions = [{ value: "Todos", label: "Todos" }, { value: "1º Semestre", label: "1º Semestre" }, { value: "2º Semestre", label: "2º Semestre" }];
 
   return (
-    <div style={{ minHeight: "100%", background: CREAM, fontFamily: SANS, color: INK }}>
-      <div style={{ height: 6, background: `linear-gradient(90deg, ${NAVY} 0%, ${NAVY} 60%, ${RED} 100%)` }} />
-      <div style={{ maxWidth: 900, margin: "0 auto", padding: "28px 20px 60px" }}>
+    <div className="cultura-view">
+      
+      <div className="cultura-content">
         {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 14, marginBottom: 20 }}>
+        <div className="cultura-section-header cultura-section-header-actions">
           <div>
-            <div style={{ fontFamily: SANS, fontSize: 11, fontWeight: 700, letterSpacing: 1.6, color: RED, textTransform: "uppercase" }}>
+            <div className="cultura-eyebrow">
               Portal Financeiro
             </div>
             <h1 style={{ fontFamily: SERIF, fontSize: 30, fontWeight: 400, color: NAVY, margin: "4px 0 0" }}>
@@ -452,7 +453,7 @@ function DreView({ title }) {
         )}
 
         {/* Filtros */}
-        <div style={{ display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap", background: CARD, border: `1px solid ${LINE}`, borderRadius: 10, padding: "14px 18px", marginBottom: 20 }}>
+        <div className="cultura-filters">
           <div>
             <FilterLabel>Ano</FilterLabel>
             <Select value={meta.ano} onChange={() => {}} options={[{ value: meta.ano, label: meta.ano }]} disabled title="Disponível quando o arquivo tiver mais de um ano" />
@@ -490,7 +491,7 @@ function DreView({ title }) {
         )}
 
         {/* Tabela DRE */}
-        <div style={{ background: CARD, border: `1px solid ${LINE}`, borderRadius: 10, overflow: "hidden" }}>
+        <div className="cultura-table-shell">
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>
@@ -553,7 +554,7 @@ function DreView({ title }) {
                             </td>
                           </tr>
                           {cExpanded && filiaisDaConta.map(([fName, fVal]) => (
-                            <tr key={fName} style={{ background: "#FCFBF9" }}>
+                            <tr key={fName} style={{ background: "#f8fafc" }}>
                               <td style={{ padding: "5px 16px 5px 66px", fontFamily: SANS, fontSize: 12, color: MUTED }}>{fName}</td>
                               <td style={{ padding: "5px 16px", textAlign: "right", fontFamily: MONO, fontSize: 12, color: fVal < 0 ? NEG : fVal > 0 ? POS : MUTED }}>
                                 {fmtBRL(fVal)}
@@ -954,10 +955,10 @@ function RateioView({ rules, toggles }) {
   const semestreOptions = [{ value: "Todos", label: "Todos" }, { value: "1º Semestre", label: "1º Semestre" }, { value: "2º Semestre", label: "2º Semestre" }];
 
   return (
-    <div style={{ minHeight: "100%", background: CREAM, fontFamily: SANS, color: INK }}>
-      <div style={{ maxWidth: 900, margin: "0 auto", padding: "28px 20px 60px" }}>
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontFamily: SANS, fontSize: 11, fontWeight: 700, letterSpacing: 1.6, color: RED, textTransform: "uppercase" }}>
+    <div className="cultura-view">
+      <div className="cultura-content">
+        <div className="cultura-section-header">
+          <div className="cultura-eyebrow">
             Portal Financeiro
           </div>
           <h1 style={{ fontFamily: SERIF, fontSize: 30, fontWeight: 400, color: NAVY, margin: "4px 0 0" }}>DRE Rateio</h1>
@@ -976,7 +977,7 @@ function RateioView({ rules, toggles }) {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap", background: CARD, border: `1px solid ${LINE}`, borderRadius: 10, padding: "14px 18px", marginBottom: 20 }}>
+        <div className="cultura-filters">
           <div>
             <FilterLabel>Semestre</FilterLabel>
             <Select value={semestre} onChange={(v) => { setSemestre(v); setMes("Todos"); }} options={semestreOptions} />
@@ -995,7 +996,7 @@ function RateioView({ rules, toggles }) {
           </div>
         </div>
 
-        <div style={{ background: CARD, border: `1px solid ${LINE}`, borderRadius: 10, overflow: "hidden" }}>
+        <div className="cultura-table-shell">
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>
@@ -1083,7 +1084,7 @@ function RateioView({ rules, toggles }) {
                           )}
                           {cExpanded && toggles.deducoesBVRateada && (c.classif === CLASSIF_COFINS || c.classif === "3.2.1.10.010.004") && (
                             <tr>
-                              <td colSpan={3} style={{ padding: "0 16px 0 56px", background: "#FCFBF9" }}>
+                              <td colSpan={3} style={{ padding: "0 16px 0 56px", background: "#f8fafc" }}>
                                 <div style={{
                                   display: "flex", gap: 8, alignItems: "flex-start",
                                   background: "#FFF6DA", border: "1px solid #E9CD6E", borderRadius: 8,
@@ -1101,7 +1102,7 @@ function RateioView({ rules, toggles }) {
                           )}
                           {cExpanded && toggles.sgcSubstituiFolha && CLASSIF_FOLHA_DESTINO_SGC.includes(c.classif) && (
                             <tr>
-                              <td colSpan={3} style={{ padding: "0 16px 0 56px", background: "#FCFBF9" }}>
+                              <td colSpan={3} style={{ padding: "0 16px 0 56px", background: "#f8fafc" }}>
                                 <div style={{
                                   display: "flex", gap: 8, alignItems: "flex-start",
                                   background: "#FFF6DA", border: "1px solid #E9CD6E", borderRadius: 8,
@@ -1170,7 +1171,7 @@ function MemoriaCalculoRecuperacao({ ajustesPorMes, mesesVisiveis }) {
 
   return (
     <tr>
-      <td colSpan={3} style={{ padding: "0 16px 16px 56px", background: "#FCFBF9" }}>
+      <td colSpan={3} style={{ padding: "0 16px 16px 56px", background: "#f8fafc" }}>
         <div style={{
           display: "flex", gap: 8, alignItems: "flex-start",
           background: "#FFF6DA", border: "1px solid #E9CD6E", borderRadius: 8,
@@ -1251,7 +1252,7 @@ function MemoriaCalculo({ detalhes }) {
 
   return (
     <tr>
-      <td colSpan={2} style={{ padding: "10px 16px 16px 56px", background: "#FCFBF9" }}>
+      <td colSpan={2} style={{ padding: "10px 16px 16px 56px", background: "#f8fafc" }}>
         <div style={{ fontFamily: SANS, fontSize: 11, fontWeight: 700, color: NAVY, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.3 }}>
           Memória de cálculo
         </div>
@@ -1370,10 +1371,10 @@ function TogglesView({ toggles, setToggles }) {
   const set = (key) => (v) => setToggles((prev) => ({ ...prev, [key]: v }));
 
   return (
-    <div style={{ minHeight: "100%", background: CREAM, fontFamily: SANS, color: INK }}>
-      <div style={{ maxWidth: 900, margin: "0 auto", padding: "28px 20px 60px" }}>
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontFamily: SANS, fontSize: 11, fontWeight: 700, letterSpacing: 1.6, color: RED, textTransform: "uppercase" }}>
+    <div className="cultura-view">
+      <div className="cultura-content">
+        <div className="cultura-section-header">
+          <div className="cultura-eyebrow">
             Portal Financeiro
           </div>
           <h1 style={{ fontFamily: SERIF, fontSize: 30, fontWeight: 400, color: NAVY, margin: "4px 0 0" }}>Ligar/Desligar Regras</h1>
@@ -1629,10 +1630,10 @@ function ComparativoFilialView({ rules, toggles }) {
   const semestreOptions = [{ value: "Todos", label: "Todos" }, { value: "1º Semestre", label: "1º Semestre" }, { value: "2º Semestre", label: "2º Semestre" }];
 
   return (
-    <div style={{ minHeight: "100%", background: CREAM, fontFamily: SANS, color: INK }}>
-      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 20px 60px" }}>
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontFamily: SANS, fontSize: 11, fontWeight: 700, letterSpacing: 1.6, color: RED, textTransform: "uppercase" }}>
+    <div className="cultura-view">
+      <div className="cultura-content">
+        <div className="cultura-section-header">
+          <div className="cultura-eyebrow">
             Portal Financeiro
           </div>
           <h1 style={{ fontFamily: SERIF, fontSize: 30, fontWeight: 400, color: NAVY, margin: "4px 0 0" }}>Comparativo de Filial</h1>
@@ -1642,7 +1643,7 @@ function ComparativoFilialView({ rules, toggles }) {
           </p>
         </div>
 
-        <div style={{ display: "flex", gap: 20, alignItems: "center", background: CARD, border: `1px solid ${LINE}`, borderRadius: 10, padding: "14px 18px", marginBottom: 20 }}>
+        <div className="cultura-filters">
           <div>
             <FilterLabel>Semestre</FilterLabel>
             <Select value={semestre} onChange={(v) => { setSemestre(v); setMes("Todos"); }} options={semestreOptions} />
@@ -1653,7 +1654,7 @@ function ComparativoFilialView({ rules, toggles }) {
           </div>
         </div>
 
-        <div style={{ background: CARD, border: `1px solid ${LINE}`, borderRadius: 10, overflow: "auto", maxWidth: "100%" }}>
+        <div className="cultura-table-shell">
           <table style={{ borderCollapse: "collapse", fontFamily: MONO, fontSize: 12 }}>
             <thead>
               <tr>
@@ -1727,7 +1728,7 @@ function BarraComClique({ dados, maxItens, corBarra, formatador, calculoFn }) {
               {d.label}
             </div>
             <div
-              style={{ flex: 1, background: "#EEECE6", borderRadius: 4, height: 16, position: "relative", cursor: "pointer" }}
+              style={{ flex: 1, background: "#edf2f7", borderRadius: 4, height: 16, position: "relative", cursor: "pointer" }}
               onClick={() => setAberto(aberto === i ? null : i)}
             >
               <div style={{ width: `${(Math.abs(d.valor) / maxAbs) * 100}%`, background: corBarra || NAVY, height: "100%", borderRadius: 4 }} />
@@ -1884,7 +1885,7 @@ function TurmasView({ rules, toggles }) {
 
   const [hoverCard, setHoverCard] = useState(null);
   const CardLat = ({ id, label, valor, cor, calculo }) => (
-    <div
+    <div className="cultura-metric"
       style={{ background: "#fff", border: `1px solid ${LINE}`, borderRadius: 10, padding: "14px 16px", position: "relative", cursor: calculo ? "pointer" : "default" }}
       onClick={() => setHoverCard(hoverCard === id ? null : id)}
     >
@@ -1904,10 +1905,10 @@ function TurmasView({ rules, toggles }) {
   );
 
   return (
-    <div style={{ minHeight: "100%", background: CREAM, fontFamily: SANS, color: INK }}>
-      <div style={{ maxWidth: 1300, margin: "0 auto", padding: "28px 20px 60px" }}>
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontFamily: SANS, fontSize: 11, fontWeight: 700, letterSpacing: 1.6, color: RED, textTransform: "uppercase" }}>
+    <div className="cultura-view">
+      <div className="cultura-content">
+        <div className="cultura-section-header">
+          <div className="cultura-eyebrow">
             Portal Financeiro
           </div>
           <h1 style={{ fontFamily: SERIF, fontSize: 30, fontWeight: 400, color: NAVY, margin: "4px 0 0" }}>Turmas</h1>
@@ -1918,7 +1919,7 @@ function TurmasView({ rules, toggles }) {
           </p>
         </div>
 
-        <div style={{ display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap", background: CARD, border: `1px solid ${LINE}`, borderRadius: 10, padding: "14px 18px", marginBottom: 20 }}>
+        <div className="cultura-filters">
           <div>
             <FilterLabel>Semestre</FilterLabel>
             <Select value={semestre} onChange={(v) => { setSemestre(v); setMes("Todos"); }} options={semestreOptions} />
@@ -1933,8 +1934,8 @@ function TurmasView({ rules, toggles }) {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 20 }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12, width: 230, flexShrink: 0 }}>
+        <div className="cultura-metrics-layout">
+          <div className="cultura-metrics-rail">
             <CardLat
               id="turmas" label="Número de Turmas" valor={numeroTurmas.toLocaleString("pt-BR")}
               calculo={<>Turmas distintas no recorte selecionado{filial !== "Todos" ? ` (${filialLabel(filial)})` : " (todas as filiais)"}{semestreEfetivo !== "Todos" ? `, ${semestreEfetivo}` : ", ano completo"}.</>}
@@ -1959,7 +1960,7 @@ function TurmasView({ rules, toggles }) {
 
           <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 20 }}>
             <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
-              <div style={{ flex: "1 1 460px", background: CARD, border: `1px solid ${LINE}`, borderRadius: 12, padding: 18 }}>
+              <div className="cultura-panel" style={{ flex: "1 1 460px", background: CARD, border: `1px solid ${LINE}`, borderRadius: 12, padding: 18 }}>
                 <h2 style={{ fontFamily: SERIF, fontSize: 16, color: NAVY, margin: "0 0 12px" }}>Custo Aluno por Turma <span style={{ fontSize: 10.5, color: MUTED, fontWeight: 400 }}>(as 14 mais caras)</span></h2>
                 <BarraComClique
                   dados={custoAlunoPorTurmaChart} maxItens={14} corBarra={RED} formatador={(v) => fmtBRL(v)}
@@ -1969,10 +1970,10 @@ function TurmasView({ rules, toggles }) {
                   }}
                 />
               </div>
-              <div style={{ flex: "1 1 460px", background: CARD, border: `1px solid ${LINE}`, borderRadius: 12, padding: 18 }}>
+              <div className="cultura-panel" style={{ flex: "1 1 460px", background: CARD, border: `1px solid ${LINE}`, borderRadius: 12, padding: 18 }}>
                 <h2 style={{ fontFamily: SERIF, fontSize: 16, color: NAVY, margin: "0 0 12px" }}>Alunos por Turma <span style={{ fontSize: 10.5, color: MUTED, fontWeight: 400 }}>(as 14 maiores)</span></h2>
                 <BarraComClique
-                  dados={alunosPorTurmaChart} maxItens={14} corBarra={NAVY}
+                  dados={alunosPorTurmaChart} maxItens={14} corBarra={RED}
                   calculoFn={(d) => {
                     const t = d._t;
                     return <>Curso: {t.curso}<br />Filial: {filialLabel(t.filial)}<br />Alunos distintos na turma: {t.alunos}</>;
@@ -1982,7 +1983,7 @@ function TurmasView({ rules, toggles }) {
             </div>
 
             <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
-              <div style={{ flex: "1 1 460px", background: CARD, border: `1px solid ${LINE}`, borderRadius: 12, padding: 18 }}>
+              <div className="cultura-panel" style={{ flex: "1 1 460px", background: CARD, border: `1px solid ${LINE}`, borderRadius: 12, padding: 18 }}>
                 <h2 style={{ fontFamily: SERIF, fontSize: 16, color: NAVY, margin: "0 0 12px" }}>Custo por Turma <span style={{ fontSize: 10.5, color: MUTED, fontWeight: 400 }}>(as 14 mais caras, total)</span></h2>
                 <BarraComClique
                   dados={custoPorTurmaChart} maxItens={14} corBarra={RED} formatador={(v) => fmtBRL(v)}
@@ -1992,7 +1993,7 @@ function TurmasView({ rules, toggles }) {
                   }}
                 />
               </div>
-              <div style={{ flex: "1 1 460px", background: CARD, border: `1px solid ${LINE}`, borderRadius: 12, padding: 18 }}>
+              <div className="cultura-panel" style={{ flex: "1 1 460px", background: CARD, border: `1px solid ${LINE}`, borderRadius: 12, padding: 18 }}>
                 <h2 style={{ fontFamily: SERIF, fontSize: 16, color: NAVY, margin: "0 0 12px" }}>Receita × Custo <span style={{ fontSize: 10.5, color: MUTED, fontWeight: 400 }}>(top 12 por receita)</span></h2>
                 <div>
                   {receitaCustoChart.map((d, i) => {
@@ -2107,10 +2108,10 @@ function CursosTurmasView() {
   const filialOptions = [{ value: "Todos", label: "Todos" }, ...filiais.map((f) => ({ value: f, label: filialLabel(f) }))];
 
   return (
-    <div style={{ minHeight: "100%", background: CREAM, fontFamily: SANS, color: INK }}>
-      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 20px 60px" }}>
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontFamily: SANS, fontSize: 11, fontWeight: 700, letterSpacing: 1.6, color: RED, textTransform: "uppercase" }}>
+    <div className="cultura-view">
+      <div className="cultura-content">
+        <div className="cultura-section-header">
+          <div className="cultura-eyebrow">
             Portal Financeiro
           </div>
           <h1 style={{ fontFamily: SERIF, fontSize: 30, fontWeight: 400, color: NAVY, margin: "4px 0 0" }}>Cursos e Turmas</h1>
@@ -2120,7 +2121,7 @@ function CursosTurmasView() {
           </p>
         </div>
 
-        <div style={{ display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap", background: CARD, border: `1px solid ${LINE}`, borderRadius: 10, padding: "14px 18px", marginBottom: 20 }}>
+        <div className="cultura-filters">
           <div>
             <FilterLabel>Mês</FilterLabel>
             <Select value={mes} onChange={setMes} options={mesOptions} />
@@ -2158,7 +2159,7 @@ function CursosTurmasView() {
           </div>
         )}
 
-        <div style={{ background: CARD, border: `1px solid ${LINE}`, borderRadius: 12, padding: "18px 20px", marginBottom: 24 }}>
+        <div className="cultura-panel" style={{ background: CARD, border: `1px solid ${LINE}`, borderRadius: 12, padding: "18px 20px", marginBottom: 24 }}>
           <div style={{ fontFamily: SANS, fontSize: 11, fontWeight: 700, color: MUTED, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 12 }}>
             Novato × Rematriculado × Recuperado
           </div>
@@ -2201,7 +2202,7 @@ function CursosTurmasView() {
 
         <div style={{ marginBottom: 24 }}>
           <h2 style={{ fontFamily: SERIF, fontSize: 20, color: NAVY, margin: "0 0 12px" }}>Comparativo por filial {mes !== "Todos" ? `— ${mes}` : "— ano completo"}</h2>
-          <div style={{ background: CARD, border: `1px solid ${LINE}`, borderRadius: 10, overflow: "hidden" }}>
+          <div className="cultura-table-shell">
             <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: MONO, fontSize: 12.5 }}>
               <thead>
                 <tr>
@@ -2242,7 +2243,7 @@ function CursosTurmasView() {
         <div>
           <h2 style={{ fontFamily: SERIF, fontSize: 20, color: NAVY, margin: "0 0 4px" }}>Cursos mais procurados</h2>
           <p style={{ fontFamily: SANS, fontSize: 12, color: MUTED, marginTop: 0, marginBottom: 12 }}>Ano completo 2025, rede toda (esse ranking não muda com os filtros acima).</p>
-          <div style={{ background: CARD, border: `1px solid ${LINE}`, borderRadius: 10, overflow: "hidden" }}>
+          <div className="cultura-table-shell">
             <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: MONO, fontSize: 12.5 }}>
               <thead>
                 <tr>
@@ -2295,7 +2296,7 @@ function BarrasHorizontais({ dados, maxItens = 8, corBarra }) {
               {d.label}
             </div>
             <div
-              style={{ flex: 1, background: "#EEECE6", borderRadius: 4, height: 16, position: "relative", cursor: "pointer" }}
+              style={{ flex: 1, background: "#edf2f7", borderRadius: 4, height: 16, position: "relative", cursor: "pointer" }}
               onMouseEnter={() => setHover(i)}
               onMouseLeave={() => setHover(null)}
             >
@@ -2336,11 +2337,11 @@ function SparklineAlunos({ pontos }) {
   return (
     <div style={{ position: "relative" }}>
       <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", height: 150, overflow: "visible" }}>
-        <path d={area} fill="#EEECE6" />
-        <path d={linha} fill="none" stroke={NAVY} strokeWidth="2" />
+        <path d={area} fill="#edf2f7" />
+        <path d={linha} fill="none" stroke={RED} strokeWidth="2" />
         {coords.map(([x, y], i) => (
           <circle
-            key={i} cx={x} cy={y} r={hover === i ? 5 : 2.5} fill={hover === i ? RED : NAVY}
+            key={i} cx={x} cy={y} r={hover === i ? 5 : 2.5} fill={hover === i ? NAVY : RED}
             style={{ cursor: "pointer" }}
             onMouseEnter={() => setHover(i)}
             onMouseLeave={() => setHover(null)}
@@ -2474,7 +2475,7 @@ function AlunosView({ rules, toggles }) {
 
   const [hoverCard, setHoverCard] = useState(null);
   const CardMini = ({ id, label, valor, cor, calculo }) => (
-    <div
+    <div className="cultura-metric"
       style={{ background: "#fff", border: `1px solid ${LINE}`, borderRadius: 8, padding: "10px 14px", flex: "1 1 150px", minWidth: 140, position: "relative", cursor: calculo ? "pointer" : "default" }}
       onMouseEnter={() => calculo && setHoverCard(id)}
       onMouseLeave={() => setHoverCard(null)}
@@ -2495,10 +2496,10 @@ function AlunosView({ rules, toggles }) {
   );
 
   return (
-    <div style={{ minHeight: "100%", background: CREAM, fontFamily: SANS, color: INK }}>
-      <div style={{ maxWidth: 1180, margin: "0 auto", padding: "28px 20px 60px" }}>
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontFamily: SANS, fontSize: 11, fontWeight: 700, letterSpacing: 1.6, color: RED, textTransform: "uppercase" }}>
+    <div className="cultura-view">
+      <div className="cultura-content">
+        <div className="cultura-section-header">
+          <div className="cultura-eyebrow">
             Portal Financeiro
           </div>
           <h1 style={{ fontFamily: SERIF, fontSize: 30, fontWeight: 400, color: NAVY, margin: "4px 0 0" }}>Alunos</h1>
@@ -2508,7 +2509,7 @@ function AlunosView({ rules, toggles }) {
           </p>
         </div>
 
-        <div style={{ display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap", background: CARD, border: `1px solid ${LINE}`, borderRadius: 10, padding: "14px 18px", marginBottom: 20 }}>
+        <div className="cultura-filters">
           <div>
             <FilterLabel>Mês</FilterLabel>
             <Select value={mes} onChange={setMes} options={mesOptions} />
@@ -2520,7 +2521,7 @@ function AlunosView({ rules, toggles }) {
         </div>
 
         <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: 20 }}>
-          <div style={{ flex: "1 1 260px", background: CARD, border: `1px solid ${LINE}`, borderRadius: 12, padding: 16 }}>
+          <div className="cultura-panel" style={{ flex: "1 1 260px", background: CARD, border: `1px solid ${LINE}`, borderRadius: 12, padding: 16 }}>
             <div style={{ fontFamily: SANS, fontSize: 11, fontWeight: 700, color: RED, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 10 }}>Resultado Financeiro</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               <CardMini label="Receita Bruta" valor={fmtBRL(round2(financeiro.receitaBruta))} />
@@ -2528,7 +2529,7 @@ function AlunosView({ rules, toggles }) {
               <CardMini label="Margem de Lucro" valor={`${margemLucro.toFixed(2)}%`} cor="#8A6D00" />
             </div>
           </div>
-          <div style={{ flex: "1 1 340px", background: CARD, border: `1px solid ${LINE}`, borderRadius: 12, padding: 16 }}>
+          <div className="cultura-panel" style={{ flex: "1 1 340px", background: CARD, border: `1px solid ${LINE}`, borderRadius: 12, padding: 16 }}>
             <div style={{ fontFamily: SANS, fontSize: 11, fontWeight: 700, color: RED, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 10 }}>Indicadores por Aluno</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               <CardMini
@@ -2549,7 +2550,7 @@ function AlunosView({ rules, toggles }) {
               />
             </div>
           </div>
-          <div style={{ flex: "1 1 180px", background: CARD, border: `1px solid ${LINE}`, borderRadius: 12, padding: 16 }}>
+          <div className="cultura-panel" style={{ flex: "1 1 180px", background: CARD, border: `1px solid ${LINE}`, borderRadius: 12, padding: 16 }}>
             <div style={{ fontFamily: SANS, fontSize: 11, fontWeight: 700, color: RED, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 10 }}>Volume</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               <CardMini label="Número de Alunos" valor={numeroAlunos.toLocaleString("pt-BR")} />
@@ -2557,30 +2558,30 @@ function AlunosView({ rules, toggles }) {
           </div>
         </div>
 
-        <div style={{ background: CARD, border: `1px solid ${LINE}`, borderRadius: 12, padding: 18, marginBottom: 20 }}>
+        <div className="cultura-panel" style={{ background: CARD, border: `1px solid ${LINE}`, borderRadius: 12, padding: 18, marginBottom: 20 }}>
           <h2 style={{ fontFamily: SERIF, fontSize: 17, color: NAVY, margin: "0 0 8px" }}>Número de alunos ativos {filial !== "Todos" ? `— ${filialLabel(filial)}` : "— rede toda"}</h2>
           <SparklineAlunos pontos={alunosAtivosPorMes} />
         </div>
 
         <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: 20 }}>
-          <div style={{ flex: "1 1 460px", background: CARD, border: `1px solid ${LINE}`, borderRadius: 12, padding: 18 }}>
+          <div className="cultura-panel" style={{ flex: "1 1 460px", background: CARD, border: `1px solid ${LINE}`, borderRadius: 12, padding: 18 }}>
             <h2 style={{ fontFamily: SERIF, fontSize: 17, color: NAVY, margin: "0 0 12px" }}>Alunos por filial</h2>
-            <BarrasHorizontais dados={alunosPorFilial} maxItens={8} corBarra={NAVY} />
+            <BarrasHorizontais dados={alunosPorFilial} maxItens={8} corBarra={RED} />
           </div>
-          <div style={{ flex: "1 1 460px", background: CARD, border: `1px solid ${LINE}`, borderRadius: 12, padding: 18 }}>
+          <div className="cultura-panel" style={{ flex: "1 1 460px", background: CARD, border: `1px solid ${LINE}`, borderRadius: 12, padding: 18 }}>
             <h2 style={{ fontFamily: SERIF, fontSize: 17, color: NAVY, margin: "0 0 12px" }}>Alunos por curso <span style={{ fontSize: 11, color: MUTED, fontWeight: 400 }}>(ano completo)</span></h2>
             <BarrasHorizontais dados={alunosPorCurso} maxItens={8} corBarra={RED} />
           </div>
         </div>
 
         <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
-          <div style={{ flex: "1 1 460px", background: CARD, border: `1px solid ${LINE}`, borderRadius: 12, padding: 18 }}>
+          <div className="cultura-panel" style={{ flex: "1 1 460px", background: CARD, border: `1px solid ${LINE}`, borderRadius: 12, padding: 18 }}>
             <h2 style={{ fontFamily: SERIF, fontSize: 17, color: NAVY, margin: "0 0 12px" }}>Alunos por turma <span style={{ fontSize: 11, color: MUTED, fontWeight: 400 }}>(top 8, ano completo)</span></h2>
-            <BarrasHorizontais dados={alunosPorTurma} maxItens={8} corBarra="#8A6D00" />
+            <BarrasHorizontais dados={alunosPorTurma} maxItens={8} corBarra="#0d9488" />
           </div>
-          <div style={{ flex: "1 1 460px", background: CARD, border: `1px solid ${LINE}`, borderRadius: 12, padding: 18 }}>
+          <div className="cultura-panel" style={{ flex: "1 1 460px", background: CARD, border: `1px solid ${LINE}`, borderRadius: 12, padding: 18 }}>
             <h2 style={{ fontFamily: SERIF, fontSize: 17, color: NAVY, margin: "0 0 12px" }}>Alunos por tipo</h2>
-            <BarrasHorizontais dados={alunosPorTipo} maxItens={3} corBarra={NAVY} />
+            <BarrasHorizontais dados={alunosPorTipo} maxItens={3} corBarra={RED} />
           </div>
         </div>
 
@@ -2609,29 +2610,24 @@ function App() {
   const [rateioRules] = useState(DEFAULT_RATEIO_RULES);
   const [ruleToggles, setRuleToggles] = useState(DEFAULT_RULE_TOGGLES);
 
-  const tabBtn = (id, label) => (
+  const tabIcons = { contabil: FileSpreadsheet, rateio: BarChart3, comparativo: GitCompareArrows, alunos: Users, turmas: GraduationCap, cursos: BookOpen, toggles: SlidersHorizontal };
+  const tabBtn = (id, label) => {
+    const Icon = tabIcons[id];
+    return (
     <button
       onClick={() => setTab(id)}
-      style={{
-        padding: "10px 18px",
-        borderRadius: "8px 8px 0 0",
-        border: "none",
-        borderBottom: tab === id ? `3px solid ${RED}` : `3px solid transparent`,
-        background: tab === id ? "#fff" : "transparent",
-        color: tab === id ? NAVY : MUTED,
-        fontFamily: SANS,
-        fontSize: 13.5,
-        fontWeight: tab === id ? 700 : 500,
-        cursor: "pointer",
-      }}
+      className="cultura-nav-button"
+      aria-pressed={tab === id}
     >
+      <Icon size={16} aria-hidden="true" />
       {label}
     </button>
   );
+  };
 
   return (
-    <div style={{ minHeight: "100%", background: CREAM }}>
-      <div style={{ display: "flex", gap: 4, padding: "10px 20px 0", background: CREAM, borderBottom: `1px solid ${LINE}`, flexWrap: "wrap" }}>
+    <div className="cultura-workspace">
+      <div className="cultura-navigation" role="group" aria-label="Visões do dashboard Cultura Inglesa">
         {tabBtn("contabil", "DRE Contábil")}
         {tabBtn("rateio", "DRE Rateio")}
         {tabBtn("comparativo", "Comparativo de Filial")}

@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
 const { parse } = require('@babel/parser');
+const refineCulturaViewer = require('./refine-cultura-viewer.cjs');
 
 const root = path.resolve(__dirname, '../..');
 const source = fs.readFileSync(path.join(root, 'dre-contabil-viewer/dre-contabil-viewer.jsx'), 'utf8');
@@ -53,14 +54,16 @@ adapted = adapted.replace('export default function App()', 'function App()');
 adapted += '\nreturn App;\n}\n';
 adapted = 'import { CulturaStatCard as StatCard } from "./cultura-stat-card";\n' + adapted;
 
+adapted = refineCulturaViewer(adapted);
+
 const targetDir = path.join(root, 'frontend/src/features/dashboards/cultura');
 const dataDir = path.join(root, 'backend/apps/dashboards/private_data');
 const target = path.join(targetDir, 'cultura-viewer.jsx');
 const dataTarget = path.join(dataDir, 'cultura_inglesa.json');
-if (process.argv.includes('--check')) {
-  assert.equal(fs.readFileSync(target, 'utf8'), adapted, 'Viewer changed beyond data extraction and theme tokens');
-  assert.deepEqual(JSON.parse(fs.readFileSync(dataTarget, 'utf8')), dataset, 'Dataset differs from supplied original');
-  console.log(`Original preserved: ${Object.keys(dataset).length} datasets/configurations; calculation and JSX bodies unchanged.`);
+if (process.argv.includes('--check') || process.argv.includes('--check-viewer')) {
+  assert.equal(fs.readFileSync(target, 'utf8'), adapted, 'Viewer differs from the reproducible presentation adaptation');
+  if (!process.argv.includes('--check-viewer')) assert.deepEqual(JSON.parse(fs.readFileSync(dataTarget, 'utf8')), dataset, 'Dataset differs from supplied original');
+  console.log(`Original preserved: ${Object.keys(dataset).length} datasets/configurations; original calculations preserved with explicit presentation adaptation.`);
 } else {
   fs.mkdirSync(targetDir, { recursive: true });
   fs.mkdirSync(dataDir, { recursive: true });
