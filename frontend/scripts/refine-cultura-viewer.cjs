@@ -40,5 +40,5 @@ module.exports = function refineCulturaViewer(source) {
   replace('#FCFBF9', '#f8fafc');
   // Surface classes for existing metric groups and chart panels.
   source = source.replace(/<div style=\{\{ (flex: "[^"\n]+", )?background: CARD, border: `1px solid \$\{LINE\}`, borderRadius: (10|12),/g, '<div className="cultura-panel" style={{ $1background: CARD, border: `1px solid $' + '{LINE}`, borderRadius: $2,');
-  return source;
+  return source.replace(/[ \t]+\r?\n/g, '\n');
 };

@@ -404,7 +404,7 @@ function DreView({ title }) {
 
   return (
     <div className="cultura-view">
-      
+
       <div className="cultura-content">
         {/* Header */}
         <div className="cultura-section-header cultura-section-header-actions">
