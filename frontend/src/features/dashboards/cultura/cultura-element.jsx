@@ -1,3 +1,4 @@
+import { arrangeCulturaContent, isProfessorTable, ResizableProfessorTable } from './cultura-presentation'
 import { createElement } from 'react'
 import {
   Activity, BarChart3, BookOpen, Briefcase, ClipboardCheck, ClipboardList, FileSpreadsheet, GitCompareArrows,
@@ -128,7 +129,7 @@ export function culturaElement(type, props, ...children) {
     if (style.display === 'flex' && children.flat().filter(isKpi).length >= 2) {
       add('cultura-kpi-grid'); omit('display', 'gap', 'flexWrap')
     }
-    if (children.some(child => child?.type === 'table')) add('cultura-table-shell')
+    if (children.some(child => child?.type === 'table' || child?.type === ResizableProfessorTable)) add('cultura-table-shell')
     if (style.display === 'flex' && children.some(child => child?.props?.className?.includes('cultura-metrics-rail'))) {
       add('cultura-metrics-layout'); omit('display', 'gap')
     }
@@ -190,5 +191,7 @@ export function culturaElement(type, props, ...children) {
 
   for (const key of Object.keys(style)) style[key] = recolor(style[key])
   next.className = classes.join(' ') || undefined
+  if (type === 'table' && isProfessorTable(children)) return createElement(ResizableProfessorTable, { tableProps: next }, ...children)
+  if (classes.includes('cultura-content')) children = arrangeCulturaContent(children)
   return createElement(type, next, ...children)
 }
