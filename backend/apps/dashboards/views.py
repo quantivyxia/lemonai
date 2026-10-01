@@ -1,3 +1,7 @@
+from datetime import timedelta
+
+from django.db.models import Count, Q
+from django.utils import timezone
 from rest_framework import viewsets
 from rest_framework import status
 from rest_framework.decorators import action
@@ -5,7 +9,7 @@ from rest_framework.response import Response
 
 from apps.audit.models import AccessStatus
 from apps.audit.services import log_dashboard_access
-from apps.common.services import apply_tenant_scope, get_actor_user, is_super_admin, is_view_as_mode, is_viewer
+from apps.common.services import apply_tenant_scope, get_actor_user, is_analyst, is_super_admin, is_view_as_mode
 from apps.dashboards.filters import DashboardColumnFilter, DashboardFilter
 from apps.dashboards.models import Dashboard, DashboardColumn, DashboardStatus
 from apps.dashboards.permissions import DashboardColumnPermission, DashboardPermission
@@ -23,12 +27,17 @@ class DashboardViewSet(viewsets.ModelViewSet):
     ordering = ['name']
 
     def get_queryset(self):
-        queryset = Dashboard.objects.select_related('tenant', 'workspace').prefetch_related('columns')
+        last_7_days = timezone.now() - timedelta(days=7)
+        queryset = Dashboard.objects.select_related('tenant', 'workspace').annotate(
+            views_7d=Count(
+                'access_logs',
+                filter=Q(access_logs__status=AccessStatus.SUCCESS, access_logs__accessed_at__gte=last_7_days),
+                distinct=True,
+            ),
+        )
         queryset = apply_tenant_scope(queryset, self.request.user)
 
-        if is_super_admin(self.request.user):
-            return queryset
-        if not is_viewer(self.request.user):
+        if is_super_admin(self.request.user) or is_analyst(self.request.user):
             return queryset
 
         accessible_ids = get_user_accessible_dashboard_ids(self.request.user)
@@ -122,5 +131,11 @@ class DashboardColumnViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if is_super_admin(user):
             return queryset
-        return queryset.filter(dashboard__tenant_id=user.tenant_id)
+        queryset = queryset.filter(dashboard__tenant_id=user.tenant_id)
+        accessible_ids = get_user_accessible_dashboard_ids(user)
+        if accessible_ids is None:
+            return queryset
+        if not accessible_ids:
+            return queryset.none()
+        return queryset.filter(dashboard_id__in=accessible_ids)
 

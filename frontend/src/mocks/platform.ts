@@ -1,7 +1,6 @@
 import type {
   AccessLog,
   PermissionMatrixRow,
-  RoleAssignment,
   TenantBranding,
   UserGroup,
 } from '@/types/entities'
@@ -69,24 +68,6 @@ export const permissionMatrixMock: PermissionMatrixRow[] = [
     label: 'Gerenciar tenants',
     description: 'Criar e editar tenants da plataforma.',
     byRole: { super_admin: true, analyst: false, viewer: false },
-  },
-]
-
-export const roleAssignmentsMock: RoleAssignment[] = [
-  {
-    role: 'super_admin',
-    users: ['Camila Araujo'],
-    groups: ['Governanca Global'],
-  },
-  {
-    role: 'analyst',
-    users: ['Guilherme Prado', 'Ana Ribeiro', 'Lucas Pereira', 'Bruna Matos'],
-    groups: ['BI Squad Operacional'],
-  },
-  {
-    role: 'viewer',
-    users: ['Marina Costa', 'Rafael Nunes'],
-    groups: ['Diretoria Executiva'],
   },
 ]
 
