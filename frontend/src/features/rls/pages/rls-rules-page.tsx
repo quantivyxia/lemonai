@@ -68,6 +68,7 @@ export const RLSRulesPage = () => {
     users,
     dashboardColumns,
     rlsRules,
+    reloadDashboardColumns,
     upsertRLSRule,
     deleteRLSRule,
     toggleRLSRuleStatus,
@@ -75,6 +76,11 @@ export const RLSRulesPage = () => {
   } = usePlatformStore()
   const { canManageRLS, filterByTenant } = useTenantScope()
   const isReadOnly = isViewAsMode
+
+  useEffect(() => {
+    if (!canManageRLS || dashboardColumns.length > 0) return
+    void reloadDashboardColumns()
+  }, [canManageRLS, dashboardColumns.length, reloadDashboardColumns])
 
   const [activeTab, setActiveTab] = useState('rules')
   const [filters, setFilters] = useState<RLSRuleFilters>(defaultFilters)

@@ -1,52 +1,58 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { motion } from 'framer-motion'
 import { Eye, EyeOff, Lock, Mail } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { useAuth } from '@/hooks/use-auth'
 
-const demoAccounts = [
-  { companyLabel: 'InsightHub Global (Dono)', email: 'dono@insighthub.com', password: '123456' },
-  { companyLabel: 'Nexa (Analista)', email: 'analista@nexa.com', password: '123456' },
-  { companyLabel: 'Nexa (Usuario)', email: 'usuario@nexa.com', password: '123456' },
-]
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, '') ?? 'http://127.0.0.1:8000/api'
+
+const MS_ERROR_MESSAGES: Record<string, string> = {
+  access_denied: 'Acesso negado pela Microsoft.',
+  invalid_state: 'Sessao invalida. Tente novamente.',
+  token_failed: 'Falha ao autenticar com a Microsoft.',
+  no_email: 'Nao foi possivel obter seu e-mail da Microsoft.',
+  email_account: 'Este e-mail ja possui cadastro com senha. Use o login por e-mail.',
+  inactive: 'Sua conta esta inativa. Entre em contato com o suporte.',
+}
 
 const loginSchema = z.object({
   email: z.email('Informe um e-mail valido.'),
-  password: z
-    .string()
-    .min(6, 'A senha precisa ter ao menos 6 caracteres.'),
-  remember: z.boolean(),
+  password: z.string().min(6, 'A senha precisa ter ao menos 6 caracteres.'),
 })
 
 type LoginFormData = z.infer<typeof loginSchema>
 
 export const LoginForm = () => {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { login } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
+
+  useEffect(() => {
+    const msError = searchParams.get('ms_error')
+    if (msError) {
+      toast.error(MS_ERROR_MESSAGES[msError] ?? 'Erro ao autenticar com a Microsoft.')
+    }
+  }, [searchParams])
+
+  const handleMicrosoftLogin = () => {
+    window.location.href = `${API_BASE_URL}/authentication/microsoft/`
+  }
 
   const {
     register,
     handleSubmit,
-    setValue,
-    watch,
     formState: { errors, isSubmitting },
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
-    defaultValues: {
-      email: 'dono@insighthub.com',
-      password: '123456',
-      remember: true,
-    },
+    defaultValues: { email: '', password: '' },
   })
 
   const onSubmit = async (values: LoginFormData) => {
@@ -62,91 +68,125 @@ export const LoginForm = () => {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }}
+      initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-      className="w-full max-w-md"
+      transition={{ duration: 0.35, ease: 'easeOut' }}
+      className="w-full max-w-[360px]"
     >
-      <Card className="border-border/70 shadow-floating">
-        <CardHeader className="space-y-2">
-          <CardTitle>Entrar no InsightHub</CardTitle>
-          <CardDescription>Acesse seu portal analitico com seguranca e governanca.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">E-mail corporativo</label>
-              <div className="relative">
-                <Mail className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input {...register('email')} className="pl-9" placeholder="voce@empresa.com" />
-              </div>
-              {errors.email ? <p className="text-xs text-rose-600">{errors.email.message}</p> : null}
-            </div>
+      {/* Mobile logo — only shown when left panel is hidden */}
+      <div className="mb-8 flex items-center gap-2.5 lg:hidden">
+        <img src="/favicon.svg" alt="LemonAI" className="h-8 w-8" />
+        <span className="font-display text-xl font-bold text-foreground">LemonAI</span>
+      </div>
 
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">Senha</label>
-              <div className="relative">
-                <Lock className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  {...register('password')}
-                  type={showPassword ? 'text' : 'password'}
-                  className="pl-9 pr-9"
-                />
-                <button
-                  type="button"
-                  className="absolute right-2 top-2 rounded p-1 text-muted-foreground transition hover:bg-muted"
-                  onClick={() => setShowPassword((current) => !current)}
-                  aria-label="Alternar visualizacao da senha"
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-              {errors.password ? (
-                <p className="text-xs text-rose-600">{errors.password.message}</p>
-              ) : null}
-            </div>
+      {/* Header */}
+      <div className="mb-8">
+        <h2 className="font-display mb-2 text-3xl font-bold tracking-tight text-foreground">
+          Bem-vindo de volta
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Entre com suas credenciais para acessar a plataforma.
+        </p>
+      </div>
 
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 text-sm text-slate-600">
-                <Checkbox
-                  checked={watch('remember')}
-                  onCheckedChange={(checked) => setValue('remember', Boolean(checked))}
-                />
-                Lembrar acesso
-              </label>
-              <button type="button" className="text-sm font-medium text-primary hover:underline">
-                Esqueceu a senha?
-              </button>
-            </div>
+      {/* Form */}
+      <form className="space-y-5" onSubmit={handleSubmit(onSubmit)}>
+        {/* Email */}
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground">E-mail corporativo</label>
+          <div className="relative">
+            <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              {...register('email')}
+              className="h-11 border-border/70 bg-slate-50 pl-9 transition-colors focus-visible:bg-white"
+              placeholder="voce@empresa.com"
+              autoComplete="email"
+            />
+          </div>
+          {errors.email && (
+            <p className="text-xs text-destructive">{errors.email.message}</p>
+          )}
+        </div>
 
-            <div className="space-y-2 rounded-xl border border-border/70 bg-muted/25 p-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.05em] text-muted-foreground">
-                Acessos de demonstracao
-              </p>
-              <div className="flex flex-col gap-2">
-                {demoAccounts.map((credential) => (
-                  <button
-                    key={credential.email}
-                    type="button"
-                    className="rounded-lg border border-border/80 bg-white px-3 py-2 text-left text-xs transition hover:border-primary/35 hover:bg-primary/5"
-                    onClick={() => {
-                      setValue('email', credential.email)
-                      setValue('password', credential.password)
-                    }}
-                  >
-                    <p className="font-semibold text-slate-800">{credential.companyLabel}</p>
-                    <p className="mt-0.5 text-muted-foreground">{credential.email}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
+        {/* Password */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium text-foreground">Senha</label>
+            <button
+              type="button"
+              className="text-xs font-medium text-primary transition-opacity hover:opacity-75"
+            >
+              Esqueceu a senha?
+            </button>
+          </div>
+          <div className="relative">
+            <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              {...register('password')}
+              type={showPassword ? 'text' : 'password'}
+              className="h-11 border-border/70 bg-slate-50 pl-9 pr-10 transition-colors focus-visible:bg-white"
+              autoComplete="current-password"
+            />
+            <button
+              type="button"
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+              onClick={() => setShowPassword((v) => !v)}
+              aria-label="Alternar visualizacao da senha"
+            >
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+          {errors.password && (
+            <p className="text-xs text-destructive">{errors.password.message}</p>
+          )}
+        </div>
 
-            <Button className="w-full" size="lg" type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Validando acesso...' : 'Entrar na plataforma'}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+        {/* Submit */}
+        <Button
+          className="mt-1 h-11 w-full text-sm font-semibold"
+          type="submit"
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? 'Validando acesso...' : 'Entrar na plataforma'}
+        </Button>
+      </form>
+
+      {/* Microsoft login */}
+      <div className="mt-5">
+        <div className="relative flex items-center gap-3">
+          <div className="h-px flex-1 bg-border/60" />
+          <span className="text-xs text-muted-foreground">ou</span>
+          <div className="h-px flex-1 bg-border/60" />
+        </div>
+        <button
+          type="button"
+          onClick={handleMicrosoftLogin}
+          className="mt-4 flex w-full items-center justify-center gap-3 rounded-lg border border-border/70 bg-white px-4 py-2.5 text-sm font-medium text-foreground shadow-sm transition hover:bg-slate-50 active:scale-[0.98]"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 21 21" className="h-4 w-4 flex-shrink-0">
+            <rect x="1" y="1" width="9" height="9" fill="#f25022" />
+            <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
+            <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
+            <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
+          </svg>
+          Entrar com Microsoft
+        </button>
+      </div>
+
+      {/* Divider + footer */}
+      <div className="mt-8 border-t border-border/50 pt-6">
+        <p className="text-center text-xs text-muted-foreground/70">
+          Ao entrar, voce concorda com os{' '}
+          <span className="cursor-pointer text-primary/80 hover:text-primary hover:underline">
+            Termos de Uso
+          </span>{' '}
+          e a{' '}
+          <span className="cursor-pointer text-primary/80 hover:text-primary hover:underline">
+            Politica de Privacidade
+          </span>
+          .
+        </p>
+      </div>
     </motion.div>
   )
 }

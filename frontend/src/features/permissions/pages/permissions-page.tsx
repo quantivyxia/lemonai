@@ -8,7 +8,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useAuth } from '@/hooks/use-auth'
 import { usePlatformStore } from '@/hooks/use-platform-store'
 import { useTenantScope } from '@/hooks/use-tenant-scope'
-import { roleAssignmentsMock } from '@/mocks/platform'
 import type { PermissionMatrixRow, UserRole } from '@/types/entities'
 
 const roleLabelMap: Record<UserRole, string> = {
@@ -41,22 +40,22 @@ export const PermissionsPage = () => {
 
   const selectedAssignment = useMemo(
     () => {
-      const assignment = roleAssignmentsMock.find((item) => item.role === selectedRole)
-      if (!assignment) return undefined
-      if (isSuperAdmin) return assignment
-
-      const allowedUsers = new Set(
-        scopedUsers.map((user) => `${user.firstName} ${user.lastName}`),
-      )
-      const allowedGroups = new Set(scopedGroups.map((group) => group.name))
+      const usersForRole = scopedUsers
+        .filter((currentUser) => currentUser.role === selectedRole)
+        .map((currentUser) => `${currentUser.firstName} ${currentUser.lastName}`)
+      const groupsForRole = scopedGroups
+        .filter((group) =>
+          group.users.some((groupUser) => usersForRole.includes(groupUser)),
+        )
+        .map((group) => group.name)
 
       return {
-        ...assignment,
-        users: assignment.users.filter((user) => allowedUsers.has(user)),
-        groups: assignment.groups.filter((group) => allowedGroups.has(group)),
+        role: selectedRole,
+        users: usersForRole,
+        groups: Array.from(new Set(groupsForRole)),
       }
     },
-    [isSuperAdmin, scopedGroups, scopedUsers, selectedRole],
+    [scopedGroups, scopedUsers, selectedRole],
   )
 
   useEffect(() => {

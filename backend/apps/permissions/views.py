@@ -31,7 +31,7 @@ class RoleViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = RoleFilter
     search_fields = ['name', 'code']
     ordering_fields = ['name', 'code']
-    queryset = Role.objects.all()
+    queryset = Role.objects.prefetch_related('role_permissions__permission').all()
 
 
 class PermissionViewSet(viewsets.ReadOnlyModelViewSet):
