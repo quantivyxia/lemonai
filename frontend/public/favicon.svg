@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="LemonAI">
+  <defs>
+    <linearGradient id="lemonFill" x1="0%" x2="100%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffe36d" />
+      <stop offset="100%" stop-color="#ffca28" />
+    </linearGradient>
+  </defs>
+
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path
+      d="M44 20c4-11 20-14 33-4-12 9-23 12-33 4Z"
+      fill="#ffca28"
+      stroke="#1e88e5"
+      stroke-width="5"
+    />
+    <path
+      d="M27 26C22 14 30 3 44 4c-1 12-7 20-17 22Z"
+      fill="#ffd54a"
+      stroke="#1e88e5"
+      stroke-width="5"
+    />
+
+    <ellipse
+      cx="56"
+      cy="72"
+      rx="37"
+      ry="42"
+      fill="url(#lemonFill)"
+      stroke="#1e88e5"
+      stroke-width="6"
+    />
+
+    <path d="M56 34v76" stroke="#ffffff" stroke-width="5" />
+    <path d="M20 72h72" stroke="#ffffff" stroke-width="5" />
+    <path d="M30 46l52 52" stroke="#ffffff" stroke-width="5" />
+    <path d="M30 98l52-52" stroke="#ffffff" stroke-width="5" />
+
+    <path d="M84 89V62" stroke="#1e88e5" stroke-width="8" />
+    <path d="M95 89V52" stroke="#1e88e5" stroke-width="8" />
+    <path d="M106 89V42" stroke="#1e88e5" stroke-width="8" />
+  </g>
+</svg>

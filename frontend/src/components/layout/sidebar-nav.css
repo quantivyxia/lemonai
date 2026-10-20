@@ -1,0 +1,70 @@
+.sidebar-rail {
+  position: sticky;
+  top: 0;
+  width: 76px;
+  height: 100dvh;
+  flex-shrink: 0;
+  z-index: 40;
+}
+
+.sidebar-desktop {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 76px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  padding-inline: 12px;
+  transition: width 180ms ease, box-shadow 180ms ease;
+}
+
+.sidebar-desktop:not([data-collapsed-after-navigation]):is(:hover, :focus-within) {
+  width: 284px;
+  box-shadow: 12px 0 28px rgb(15 23 42 / 12%);
+}
+
+.sidebar-desktop .sidebar-link {
+  min-height: 40px;
+  white-space: nowrap;
+}
+
+.sidebar-desktop .sidebar-label {
+  visibility: hidden;
+  opacity: 0;
+}
+
+.sidebar-desktop:not([data-collapsed-after-navigation]):is(:hover, :focus-within) .sidebar-label {
+  visibility: visible;
+  opacity: 1;
+}
+
+.sidebar-monogram {
+  display: none;
+}
+
+.sidebar-desktop .sidebar-brand {
+  position: relative;
+  height: 80px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.sidebar-desktop .sidebar-brand .sidebar-label {
+  width: 220px;
+}
+
+.sidebar-desktop:not(:hover):not(:focus-within) .sidebar-monogram,
+.sidebar-desktop[data-collapsed-after-navigation] .sidebar-monogram {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-desktop {
+    transition: none;
+  }
+}
