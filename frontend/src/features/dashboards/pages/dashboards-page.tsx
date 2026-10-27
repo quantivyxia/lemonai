@@ -2,7 +2,6 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 
 import { PageHeader } from '@/components/shared/page-header'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { DashboardsTable } from '@/features/dashboards/components/dashboards-table'
 import { useAuth } from '@/hooks/use-auth'
 import { apiRequest } from '@/services/api-client'
 
@@ -19,6 +18,8 @@ export const DashboardsPage = () => {
 const ScopedDashboardsPage = () => {
   const [dashboards, setDashboards] = useState<PythonDashboard[]>([])
   const [selected, setSelected] = useState<string>('')
+  const [loading, setLoading] = useState(true)
+  const [failed, setFailed] = useState(false)
   const pythonAvailable = dashboards.length > 0
 
   useEffect(() => {
@@ -31,7 +32,8 @@ const ScopedDashboardsPage = () => {
           setSelected(available[0]?.id ?? '')
         }
       })
-      .catch(() => { if (!cancelled) setDashboards([]) })
+      .catch(() => { if (!cancelled) { setDashboards([]); setFailed(true) } })
+      .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [])
 
@@ -41,14 +43,13 @@ const ScopedDashboardsPage = () => {
         title="Gestao de dashboards"
         description="Organize o catalogo por tenant, workspace e categoria com controle de status."
       />
-      <Tabs defaultValue="dashboards">
-        {pythonAvailable && <TabsList aria-label="Abas de dashboards" className="mb-4">
-          <TabsTrigger value="dashboards">Gestao de dashboards</TabsTrigger>
+      <Tabs defaultValue="python">
+        <TabsList aria-label="Abas de dashboards" className="mb-4">
           <TabsTrigger value="python">Dashboard python</TabsTrigger>
-        </TabsList>}
-        <TabsContent value="dashboards" forceMount className="data-[state=inactive]:hidden">
-          <DashboardsTable />
-        </TabsContent>
+        </TabsList>
+        {!pythonAvailable && <p role={failed ? 'alert' : 'status'} className="p-6 text-sm text-muted-foreground">
+          {loading ? 'Carregando dashboards…' : failed ? 'Não foi possível carregar os dashboards. Atualize a página para tentar novamente.' : 'Nenhum dashboard disponível para este usuário.'}
+        </p>}
         {pythonAvailable && <TabsContent value="python">
           {dashboards.length > 1 && <label className="mb-4 flex flex-wrap items-center gap-3 text-sm">
             Cliente
