@@ -15,6 +15,7 @@ export const AppShell = () => {
   const { brandings, loadError } = usePlatformStore()
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const { pathname } = useLocation()
+  const isPythonDashboardRoute = pathname === '/dashboards'
   const isDashboardViewRoute = /^\/reports\/[^/]+$/.test(pathname)
   const tenantPortalName = useMemo(
     () => brandings.find((item) => item.tenantId === user?.tenantId)?.platformName?.trim(),
@@ -26,10 +27,10 @@ export const AppShell = () => {
       : tenantPortalName || user?.tenantName || 'LemonAI'
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#ebf3ff_0%,#f3f6fb_33%,#f5f7fb_65%,#f3f6fb_100%)]">
-      <div className={isDashboardViewRoute ? 'mx-auto flex w-full max-w-none' : 'mx-auto flex max-w-[1880px]'}>
+    <div className={`lemon-shell ${isPythonDashboardRoute ? 'lemon-shell-dashboard' : ''}`}>
+      <div className="lemon-app">
         <SidebarNav />
-        <div className="flex min-h-screen min-w-0 flex-1 flex-col">
+        <div className="lemon-workspace">
           <Topbar onMobileMenuOpen={() => setIsMobileSidebarOpen(true)} />
           {isViewAsMode && user ? (
             <div className="border-b border-amber-200 bg-amber-50/85 px-4 py-3 backdrop-blur sm:px-6">
@@ -60,9 +61,7 @@ export const AppShell = () => {
           ) : null}
           <main
             className={
-              isDashboardViewRoute
-                ? 'flex-1 px-2 py-6 sm:px-3 lg:px-4 xl:px-5'
-                : 'flex-1 px-3 py-6 sm:px-4 lg:px-5'
+              isPythonDashboardRoute ? 'lemon-dashboard-main' : isDashboardViewRoute ? 'lemon-report-main' : 'lemon-main'
             }
           >
             <Outlet />
@@ -82,12 +81,13 @@ export const AppShell = () => {
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: -24, opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="h-full w-[300px] bg-white p-4 shadow-floating"
+              className="h-full w-[280px] overflow-y-auto bg-white p-3 shadow-floating"
             >
               <div className="mb-4 flex items-center justify-between">
                 <div className="font-display text-lg font-semibold">{portalName}</div>
                 <Button
                   size="icon"
+                  aria-label="Fechar menu"
                   variant="ghost"
                   onClick={() => setIsMobileSidebarOpen(false)}
                 >

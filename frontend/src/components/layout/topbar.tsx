@@ -21,20 +21,20 @@ import { TICKET_NOTIFICATIONS_UPDATED_EVENT, ticketsApi } from '@/services/ticke
 import type { TicketNotification } from '@/types/entities'
 
 const mapPathToTitle: Record<string, string> = {
-  '/': 'Dashboard Home',
-  '/dashboards': 'Gestao de Dashboards',
-  '/workspaces': 'Gestao de Workspaces',
+  '/': 'Início',
+  '/dashboards': 'Dashboards',
+  '/workspaces': 'Workspaces',
   '/powerbi': 'Power BI Embedded',
   '/tickets': 'Suporte',
-  '/users': 'Gestao de Usuarios',
-  '/tenants': 'Gestao de Tenants',
-  '/groups': 'Gestao de Grupos',
-  '/permissions': 'Perfis e Permissoes',
+  '/users': 'Usuários',
+  '/tenants': 'Clientes',
+  '/groups': 'Grupos',
+  '/permissions': 'Perfis e permissões',
   '/rls': 'Regras de RLS',
   '/audit': 'Auditoria',
   '/monitoring': 'Monitoramento Global',
   '/settings/branding': 'White-label',
-  '/settings/platform': 'Configuracoes',
+  '/settings/platform': 'Configurações',
 }
 
 export const Topbar = ({ onMobileMenuOpen }: { onMobileMenuOpen: () => void }) => {
@@ -104,17 +104,16 @@ export const Topbar = ({ onMobileMenuOpen }: { onMobileMenuOpen: () => void }) =
   }
 
   return (
-    <header className="sticky top-0 z-20 border-b border-border/70 bg-white/90 backdrop-blur">
-      <div className="flex h-[74px] items-center justify-between gap-3 px-4 sm:px-6">
+    <header className="lemon-topbar">
+      <div className="flex h-14 items-center justify-between gap-3 px-4 sm:px-5">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" className="lg:hidden" onClick={onMobileMenuOpen}>
+          <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Abrir menu" onClick={onMobileMenuOpen}>
             <Menu className="h-5 w-5" />
           </Button>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
-              Portal
-            </p>
-            <h1 className="font-display text-lg font-semibold text-slate-900">
+          <div className="lemon-breadcrumb">
+            <span className="hidden text-muted-foreground xl:inline">{user?.tenantName || 'LemonAI'}</span>
+            <span aria-hidden="true" className="hidden text-slate-300 xl:inline">/</span>
+            <h1 className="truncate text-sm font-bold text-slate-900">
               {currentTitle}
             </h1>
           </div>
@@ -123,7 +122,7 @@ export const Topbar = ({ onMobileMenuOpen }: { onMobileMenuOpen: () => void }) =
         <div className="hidden max-w-md flex-1 items-center md:flex">
           <div className="relative w-full">
             <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input className="pl-9" placeholder="Buscar dashboards, usuarios ou tenants..." />
+            <Input className="pl-9" placeholder="Buscar dashboards, usuários ou clientes..." aria-label="Buscar na plataforma" />
           </div>
         </div>
 
@@ -199,7 +198,7 @@ export const Topbar = ({ onMobileMenuOpen }: { onMobileMenuOpen: () => void }) =
                   <span className="block text-sm font-semibold text-slate-900">{user?.name}</span>
                   <span className="block text-xs text-muted-foreground">{user?.tenantName}</span>
                 </span>
-                <Avatar className="h-9 w-9">
+                <Avatar className="h-8 w-8">
                   <AvatarFallback>{user?.name.slice(0, 2).toUpperCase()}</AvatarFallback>
                 </Avatar>
               </Button>
@@ -208,7 +207,7 @@ export const Topbar = ({ onMobileMenuOpen }: { onMobileMenuOpen: () => void }) =
               <DropdownMenuLabel>Minha conta</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
-                <Link to="/settings/platform">Configuracoes</Link>
+                <Link to="/settings/platform">Configurações</Link>
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => void logout()}>Sair</DropdownMenuItem>
             </DropdownMenuContent>

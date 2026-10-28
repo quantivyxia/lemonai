@@ -101,15 +101,15 @@ export const DashboardHomePage = () => {
   return (
     <section className="animate-fade-in">
       <PageHeader
-        title="Visao executiva"
-        description="Panorama consolidado de tenants, consumo e governanca da plataforma."
+        title="Visão executiva"
+        description="Acompanhe seus clientes, dashboards e acessos à plataforma."
         actions={canManagePlatform ? (
           <>
             <Button variant="outline" asChild>
               <Link to="/audit">Ver auditoria</Link>
             </Button>
             <Button asChild>
-              <Link to="/dashboards">Novo dashboard</Link>
+              <Link to="/dashboards">Abrir dashboards</Link>
             </Button>
           </>
         ) : undefined}
@@ -134,10 +134,10 @@ export const DashboardHomePage = () => {
       ) : null}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Total de usuarios" value={`${kpiMetrics.users}`} trend="+8% vs semana anterior" icon={Users} />
-        <StatCard label="Dashboards ativos" value={`${kpiMetrics.dashboards}`} trend="+5 novos publicados" icon={BarChart3} />
-        <StatCard label="Tenants ativos" value={`${kpiMetrics.activeTenants}`} trend="2 com onboarding em andamento" icon={Building2} />
-        <StatCard label="Acessos em 7 dias" value={`${kpiMetrics.accesses7d}`} trend="+12% em relacao ao periodo anterior" icon={LogIn} />
+        <StatCard label="Total de usuários" value={`${kpiMetrics.users}`} icon={Users} />
+        <StatCard label="Dashboards ativos" value={`${kpiMetrics.dashboards}`} icon={BarChart3} />
+        <StatCard label="Clientes ativos" value={`${kpiMetrics.activeTenants}`} icon={Building2} />
+        <StatCard label="Acessos em 7 dias" value={`${kpiMetrics.accesses7d}`} icon={LogIn} />
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-[1.6fr_1fr]">

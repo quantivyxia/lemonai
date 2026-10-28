@@ -259,7 +259,7 @@ export const AppAssistant = () => {
   return (
     <div className="pointer-events-none fixed bottom-4 right-4 z-40 flex max-w-[calc(100vw-1.5rem)] flex-col items-end gap-3 sm:bottom-5 sm:right-5">
       {isOpen ? (
-        <div className="pointer-events-auto flex h-[min(72vh,580px)] w-[392px] max-w-full flex-col overflow-hidden rounded-2xl border border-border/80 bg-white/95 shadow-floating backdrop-blur">
+        <div className="pointer-events-auto flex h-[min(78dvh,680px)] w-[380px] max-w-full flex-col overflow-hidden rounded-xl border border-border bg-white shadow-floating">
           <div className="flex items-start justify-between gap-3 border-b border-border/70 px-4 py-3">
             <div className="min-w-0">
               <div className="flex items-center gap-2">
@@ -357,23 +357,15 @@ export const AppAssistant = () => {
         </div>
       ) : null}
 
-      <div className="pointer-events-auto relative">
-        <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle,_rgba(59,130,246,0.22)_0%,_rgba(37,99,235,0.1)_42%,_transparent_72%)] blur-xl" />
-        <div className="absolute inset-[-2px] rounded-full border border-primary/20 opacity-80" />
-        <div className="absolute right-4 top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(74,222,128,0.75)] animate-[pulse_3.4s_ease-in-out_infinite]" />
-        <Button
-          type="button"
-          size="lg"
-          className="relative h-14 rounded-full border border-primary/20 bg-white/92 px-5 text-slate-900 shadow-[0_14px_34px_rgba(37,99,235,0.18)] backdrop-blur transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-white"
-          onClick={() => setIsOpen((current) => !current)}
-        >
-          <span className="absolute inset-0 rounded-full bg-[linear-gradient(115deg,transparent_18%,rgba(255,255,255,0.78)_50%,transparent_82%)] opacity-70 animate-[pulse_4.8s_ease-in-out_infinite]" />
-          <span className="relative flex items-center">
-            <Sparkles className="mr-2 h-4 w-4 text-primary" />
-            <span className="font-medium">Assistente IA</span>
-          </span>
-        </Button>
-      </div>
+      <Button
+        type="button"
+        className="pointer-events-auto h-10 gap-2 rounded-lg bg-[#0b2a6b] px-4 text-white shadow-sm hover:bg-[#0e3584]"
+        aria-expanded={isOpen}
+        onClick={() => setIsOpen((current) => !current)}
+      >
+        <Sparkles className="h-4 w-4" />
+        Assistente IA
+      </Button>
     </div>
   )
 }

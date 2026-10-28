@@ -1,6 +1,8 @@
 import './sidebar-nav.css'
 
 import {
+  PanelLeftClose,
+  PanelLeftOpen,
   BarChart3,
   Building2,
   Compass,
@@ -27,20 +29,20 @@ import { TICKET_NOTIFICATIONS_UPDATED_EVENT, ticketsApi } from '@/services/ticke
 import type { NavItem } from '@/types/navigation'
 
 const mainNav: NavItem[] = [
-  { label: 'Home', path: '/', icon: LayoutDashboard },
+  { label: 'Início', path: '/', icon: LayoutDashboard },
   { label: 'Dashboards', path: '/dashboards', icon: BarChart3 },
   { label: 'Workspaces', path: '/workspaces', icon: Workflow, roles: ['super_admin', 'analyst'] },
   { label: 'Power BI', path: '/powerbi', icon: DatabaseZap, roles: ['super_admin', 'analyst'] },
-  { label: 'Usuarios', path: '/users', icon: Users, roles: ['super_admin', 'analyst'] },
+  { label: 'Usuários', path: '/users', icon: Users, roles: ['super_admin', 'analyst'] },
   { label: 'Grupos', path: '/groups', icon: UsersRound, roles: ['super_admin', 'analyst'] },
-  { label: 'Permissoes', path: '/permissions', icon: ShieldCheck, roles: ['super_admin'] },
+  { label: 'Permissões', path: '/permissions', icon: ShieldCheck, roles: ['super_admin'] },
   {
     label: 'Regras RLS',
     path: '/rls',
     icon: ShieldAlert,
     roles: ['super_admin', 'analyst'],
   },
-  { label: 'Tenants', path: '/tenants', icon: Building2, roles: ['super_admin', 'analyst'] },
+  { label: 'Clientes', path: '/tenants', icon: Building2, roles: ['super_admin', 'analyst'] },
   { label: 'Auditoria', path: '/audit', icon: FileText, roles: ['super_admin', 'analyst'] },
   { label: 'Monitoramento', path: '/monitoring', icon: ActivitySquare, roles: ['super_admin'] },
 ]
@@ -54,14 +56,16 @@ const secondaryNav: NavItem[] = [
     badge: 'Novo',
     roles: ['super_admin', 'analyst'],
   },
-  { label: 'Configuracoes', path: '/settings/platform', icon: Compass },
+  { label: 'Configurações', path: '/settings/platform', icon: Compass },
 ]
 
 export const SidebarNav = ({ mobile = false, onNavigate }: { mobile?: boolean; onNavigate?: () => void }) => {
+  const [pinned, setPinned] = useState(() => window.location.pathname === '/')
   const [collapsedAfterNavigation, setCollapsedAfterNavigation] = useState(false)
   const handleNavigate = (event: MouseEvent<HTMLAnchorElement>) => {
     if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
     setCollapsedAfterNavigation(true)
+    setPinned(false)
     onNavigate?.()
   }
   const location = useLocation()
@@ -120,25 +124,25 @@ export const SidebarNav = ({ mobile = false, onNavigate }: { mobile?: boolean; o
       : tenantPortalName || user?.tenantName || 'LemonAI'
 
   return (
-    <div className={mobile ? 'h-full' : 'sidebar-rail hidden lg:block'}>
+    <div className={mobile ? 'h-full' : `sidebar-rail hidden lg:block ${pinned ? 'sidebar-pinned' : ''}`} >
     <aside
-      data-collapsed-after-navigation={collapsedAfterNavigation || undefined}
+      data-collapsed-after-navigation={!pinned && collapsedAfterNavigation || undefined}
       onMouseEnter={() => setCollapsedAfterNavigation(false)}
       onFocusCapture={() => setCollapsedAfterNavigation(false)}
       className={cn(
-        'w-full flex-col bg-white px-4 py-5',
+        'w-full flex-col bg-white px-3 py-3',
         mobile ? 'flex h-full' : 'sidebar-desktop flex border-r border-border/70',
       )}
     >
-      <Link onClick={handleNavigate} to="/" aria-label={portalName} className="sidebar-brand mb-8 block rounded-2xl bg-gradient-to-r from-primary/10 via-primary/15 to-teal-100/70 px-4 py-4">
+      <Link onClick={handleNavigate} to="/" aria-label={portalName} className="sidebar-brand">
         <span aria-hidden="true" className="sidebar-monogram">
           <img src="/favicon.svg" alt="" className="h-9 w-9 object-contain" />
         </span>
-        <div className="sidebar-label font-display text-xl font-semibold text-slate-900">{portalName}</div>
-        <p className="sidebar-label mt-1 text-xs font-medium text-slate-600">Embedded Intelligence Portal</p>
+        <span className="sidebar-label text-base font-extrabold text-slate-900">{portalName}</span>
       </Link>
 
-      <nav className="space-y-1.5">
+      <p className="sidebar-label sidebar-group">Geral</p>
+      <nav className="space-y-1">
         {visibleMainNav.map((item) => {
           const Icon = item.icon
           const isActive = location.pathname === item.path
@@ -148,6 +152,7 @@ export const SidebarNav = ({ mobile = false, onNavigate }: { mobile?: boolean; o
               onClick={handleNavigate}
               to={item.path}
               aria-label={item.label}
+              title={item.label}
               aria-current={isActive ? 'page' : undefined}
               className={cn(
                 'sidebar-link group flex items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
@@ -166,7 +171,8 @@ export const SidebarNav = ({ mobile = false, onNavigate }: { mobile?: boolean; o
         })}
       </nav>
 
-      <div className="my-6 h-px bg-border/80" />
+      <div className="my-4 h-px bg-border" />
+      <p className="sidebar-label sidebar-group">Configurações</p>
 
       <nav className="space-y-1.5">
         {visibleSecondaryNav.map((item) => {
@@ -179,6 +185,7 @@ export const SidebarNav = ({ mobile = false, onNavigate }: { mobile?: boolean; o
               onClick={handleNavigate}
               to={item.path}
               aria-label={item.label}
+              title={item.label}
               aria-current={isActive ? 'page' : undefined}
               className={cn(
                 'sidebar-link group flex items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
@@ -207,6 +214,10 @@ export const SidebarNav = ({ mobile = false, onNavigate }: { mobile?: boolean; o
           )
         })}
       </nav>
+      {!mobile && <button type="button" className="sidebar-toggle" onClick={() => { setPinned(value => !value); setCollapsedAfterNavigation(true) }} aria-label={pinned ? 'Recolher menu' : 'Fixar menu aberto'} aria-pressed={pinned}>
+        {pinned ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
+        <span className="sidebar-label">{pinned ? 'Recolher menu' : 'Fixar menu aberto'}</span>
+      </button>}
     </aside>
     </div>
   )

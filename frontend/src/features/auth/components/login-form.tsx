@@ -71,7 +71,7 @@ export const LoginForm = () => {
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, ease: 'easeOut' }}
-      className="w-full max-w-[360px]"
+      className="w-full max-w-[380px]"
     >
       {/* Mobile logo — only shown when left panel is hidden */}
       <div className="mb-8 flex items-center gap-2.5 lg:hidden">
@@ -93,12 +93,13 @@ export const LoginForm = () => {
       <form className="space-y-5" onSubmit={handleSubmit(onSubmit)}>
         {/* Email */}
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">E-mail corporativo</label>
+          <label htmlFor="login-email" className="text-sm font-medium text-foreground">E-mail corporativo</label>
           <div className="relative">
             <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               {...register('email')}
-              className="h-11 border-border/70 bg-slate-50 pl-9 transition-colors focus-visible:bg-white"
+              id="login-email" type="email"
+              className="h-12 border-border bg-white pl-9 transition-colors focus-visible:bg-white"
               placeholder="voce@empresa.com"
               autoComplete="email"
             />
@@ -111,7 +112,7 @@ export const LoginForm = () => {
         {/* Password */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <label className="text-sm font-medium text-foreground">Senha</label>
+            <label htmlFor="login-password" className="text-sm font-medium text-foreground">Senha</label>
             <button
               type="button"
               className="text-xs font-medium text-primary transition-opacity hover:opacity-75"
@@ -123,8 +124,9 @@ export const LoginForm = () => {
             <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               {...register('password')}
+              id="login-password"
               type={showPassword ? 'text' : 'password'}
-              className="h-11 border-border/70 bg-slate-50 pl-9 pr-10 transition-colors focus-visible:bg-white"
+              className="h-12 border-border bg-white pl-9 pr-10 transition-colors focus-visible:bg-white"
               autoComplete="current-password"
             />
             <button
@@ -143,7 +145,7 @@ export const LoginForm = () => {
 
         {/* Submit */}
         <Button
-          className="mt-1 h-11 w-full text-sm font-semibold"
+          className="mt-1 h-12 w-full text-sm font-semibold"
           type="submit"
           disabled={isSubmitting}
         >
