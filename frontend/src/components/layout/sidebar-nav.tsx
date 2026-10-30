@@ -60,7 +60,16 @@ const secondaryNav: NavItem[] = [
 ]
 
 export const SidebarNav = ({ mobile = false, onNavigate }: { mobile?: boolean; onNavigate?: () => void }) => {
-  const [pinned, setPinned] = useState(() => window.location.pathname === '/')
+  const [pinned, setPinned] = useState(() => {
+    try {
+      const saved = localStorage.getItem('lemon.sidebar.pinned')
+      if (saved !== null) return saved === '1'
+    } catch { /* The menu remains usable when storage is unavailable. */ }
+    return window.location.pathname === '/'
+  })
+  useEffect(() => {
+    try { localStorage.setItem('lemon.sidebar.pinned', pinned ? '1' : '0') } catch { /* Optional preference. */ }
+  }, [pinned])
   const [collapsedAfterNavigation, setCollapsedAfterNavigation] = useState(false)
   const handleNavigate = (event: MouseEvent<HTMLAnchorElement>) => {
     if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
@@ -114,14 +123,17 @@ export const SidebarNav = ({ mobile = false, onNavigate }: { mobile?: boolean; o
 
   const visibleMainNav = mainNav.filter((item) => !item.roles || (user && item.roles.includes(user.role)))
   const visibleSecondaryNav = secondaryNav.filter((item) => !item.roles || (user && item.roles.includes(user.role)))
-  const tenantPortalName = useMemo(
-    () => brandings.find((item) => item.tenantId === user?.tenantId)?.platformName?.trim(),
+  const tenantBranding = useMemo(
+    () => brandings.find((item) => item.tenantId === user?.tenantId),
     [brandings, user?.tenantId],
   )
   const portalName =
     user?.role === 'super_admin'
       ? 'LemonAI'
-      : tenantPortalName || user?.tenantName || 'LemonAI'
+      : tenantBranding?.platformName?.trim() || user?.tenantName || 'LemonAI'
+  const logoUrl = user?.role === 'super_admin' ? '/favicon.svg' : tenantBranding?.logoUrl
+  const [failedLogo, setFailedLogo] = useState<string>()
+  const initials = portalName.split(/\s+/).map(part => part[0]).slice(0, 2).join('').toUpperCase()
 
   return (
     <div className={mobile ? 'h-full' : `sidebar-rail hidden lg:block ${pinned ? 'sidebar-pinned' : ''}`} >
@@ -130,19 +142,21 @@ export const SidebarNav = ({ mobile = false, onNavigate }: { mobile?: boolean; o
       onMouseEnter={() => setCollapsedAfterNavigation(false)}
       onFocusCapture={() => setCollapsedAfterNavigation(false)}
       className={cn(
-        'w-full flex-col bg-white px-3 py-3',
+        'sidebar-surface w-full flex-col bg-white px-3 py-3',
         mobile ? 'flex h-full' : 'sidebar-desktop flex border-r border-border/70',
       )}
     >
       <Link onClick={handleNavigate} to="/" aria-label={portalName} className="sidebar-brand">
         <span aria-hidden="true" className="sidebar-monogram">
-          <img src="/favicon.svg" alt="" className="h-9 w-9 object-contain" />
+          {logoUrl && failedLogo !== logoUrl
+            ? <img src={logoUrl} onError={() => setFailedLogo(logoUrl)} alt="" />
+            : <span>{initials}</span>}
         </span>
-        <span className="sidebar-label text-base font-extrabold text-slate-900">{portalName}</span>
+        <span className="sidebar-label sidebar-tenant-info"><strong>{portalName}</strong><small>Portal do cliente</small></span>
       </Link>
 
       <p className="sidebar-label sidebar-group">Geral</p>
-      <nav className="space-y-1">
+      <nav aria-label="Navegação principal" className="space-y-1">
         {visibleMainNav.map((item) => {
           const Icon = item.icon
           const isActive = location.pathname === item.path
@@ -174,7 +188,7 @@ export const SidebarNav = ({ mobile = false, onNavigate }: { mobile?: boolean; o
       <div className="my-4 h-px bg-border" />
       <p className="sidebar-label sidebar-group">Configurações</p>
 
-      <nav className="space-y-1.5">
+      <nav aria-label="Configurações" className="space-y-1.5">
         {visibleSecondaryNav.map((item) => {
           const Icon = item.icon
           const isActive = location.pathname === item.path
@@ -202,11 +216,11 @@ export const SidebarNav = ({ mobile = false, onNavigate }: { mobile?: boolean; o
                 {item.badge ? <Badge variant="default">{item.badge}</Badge> : null}
                 {showUnreadBadge ? (
                   unreadCount > 1 ? (
-                    <span className="inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold text-white">
+                    <span className="sidebar-notification inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-semibold text-white">
                       {unreadCount > 9 ? '9+' : unreadCount}
                     </span>
                   ) : (
-                    <span className="inline-flex h-2.5 w-2.5 rounded-full bg-rose-500" />
+                    <span className="sidebar-notification inline-flex h-2.5 w-2.5 rounded-full" />
                   )
                 ) : null}
               </span>
@@ -214,10 +228,16 @@ export const SidebarNav = ({ mobile = false, onNavigate }: { mobile?: boolean; o
           )
         })}
       </nav>
+      <div className="sidebar-bottom">
       {!mobile && <button type="button" className="sidebar-toggle" onClick={() => { setPinned(value => !value); setCollapsedAfterNavigation(true) }} aria-label={pinned ? 'Recolher menu' : 'Fixar menu aberto'} aria-pressed={pinned}>
         {pinned ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
         <span className="sidebar-label">{pinned ? 'Recolher menu' : 'Fixar menu aberto'}</span>
       </button>}
+      <div className="sidebar-powered" aria-label="Powered by LemonAI">
+        <img src="/favicon.svg" alt="" />
+        <span className="sidebar-label">Powered by <strong>Lemon<span>AI</span></strong></span>
+      </div>
+      </div>
     </aside>
     </div>
   )
