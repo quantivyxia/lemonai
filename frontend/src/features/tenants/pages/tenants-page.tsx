@@ -1,4 +1,4 @@
-﻿import { AlertTriangle, Building2, Palette, Plus, Search, Users } from 'lucide-react'
+import { AlertTriangle, Building2, Copy, LifeBuoy, Palette, Plus, Search, Users } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -24,11 +24,23 @@ import type { Tenant } from '@/types/entities'
 type TenantForm = {
   id?: string
   name: string
+  joinCode: string
   status: Tenant['status']
   maxUsers: number
   maxDashboards: number
+  supportHoursTotal: number
+  supportHoursConsumed: number
   createdAt?: string
 }
+
+const formatSupportHours = (value: number) =>
+  new Intl.NumberFormat('pt-BR', {
+    minimumFractionDigits: Number.isInteger(value) ? 0 : 1,
+    maximumFractionDigits: 1,
+  }).format(value)
+
+const hasTenantCommercialAlert = (tenant: Tenant) =>
+  tenant.usersLimitReached || tenant.dashboardsLimitReached || tenant.supportLimitReached
 
 export const TenantsPage = () => {
   const { isViewAsMode } = useAuth()
@@ -39,9 +51,12 @@ export const TenantsPage = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [form, setForm] = useState<TenantForm>({
     name: '',
+    joinCode: '',
     status: 'active',
     maxUsers: 25,
     maxDashboards: 20,
+    supportHoursTotal: 0,
+    supportHoursConsumed: 0,
   })
 
   const scopedTenants = useMemo(
@@ -50,27 +65,26 @@ export const TenantsPage = () => {
   )
 
   const filteredTenants = useMemo(
-    () =>
-      scopedTenants.filter((tenant) => tenant.name.toLowerCase().includes(searchTerm.toLowerCase())),
+    () => scopedTenants.filter((tenant) => tenant.name.toLowerCase().includes(searchTerm.toLowerCase())),
     [scopedTenants, searchTerm],
   )
 
   const tenantsAtLimit = useMemo(
-    () =>
-      scopedTenants.filter(
-        (tenant) => tenant.usersLimitReached || tenant.dashboardsLimitReached,
-      ),
+    () => scopedTenants.filter((tenant) => hasTenantCommercialAlert(tenant)),
     [scopedTenants],
   )
 
   const openCreate = () => {
-    if (isReadOnly) return
+    if (!isSuperAdmin || isReadOnly) return
 
     setForm({
       name: '',
-      status: 'active',
+      joinCode: '',
+      status: 'active' as Tenant['status'],
       maxUsers: 25,
       maxDashboards: 20,
+      supportHoursTotal: 0,
+      supportHoursConsumed: 0,
     })
     setIsDialogOpen(true)
   }
@@ -81,9 +95,12 @@ export const TenantsPage = () => {
     setForm({
       id: tenant.id,
       name: tenant.name,
+      joinCode: tenant.joinCode,
       status: tenant.status,
       maxUsers: tenant.maxUsers,
       maxDashboards: tenant.maxDashboards,
+      supportHoursTotal: tenant.supportHoursTotal,
+      supportHoursConsumed: tenant.supportHoursConsumed,
       createdAt: tenant.createdAt,
     })
     setIsDialogOpen(true)
@@ -107,14 +124,25 @@ export const TenantsPage = () => {
       toast.error('O limite de dashboards deve ser maior que zero.')
       return
     }
+    if (!Number.isFinite(form.supportHoursTotal) || form.supportHoursTotal < 0) {
+      toast.error('As horas totais de suporte nao podem ser negativas.')
+      return
+    }
+    if (!Number.isFinite(form.supportHoursConsumed) || form.supportHoursConsumed < 0) {
+      toast.error('As horas consumidas de suporte nao podem ser negativas.')
+      return
+    }
 
     try {
       await upsertTenant({
         id: form.id,
         name: form.name.trim(),
+        joinCode: form.joinCode.trim().toUpperCase(),
         status: form.status,
         maxUsers: Math.floor(form.maxUsers),
         maxDashboards: Math.floor(form.maxDashboards),
+        supportHoursTotal: Number(form.supportHoursTotal.toFixed(1)),
+        supportHoursConsumed: Number(form.supportHoursConsumed.toFixed(1)),
         createdAt: form.createdAt ?? new Date().toISOString(),
       })
 
@@ -145,7 +173,7 @@ export const TenantsPage = () => {
     <section className="animate-fade-in">
       <PageHeader
         title="Gestao de tenants e clientes"
-        description="Controle de empresas, limites de consumo e identidade visual no ambiente multi-tenant."
+        description="Controle de empresas, limites de consumo, suporte e identidade visual no ambiente multi-tenant."
         actions={
           isSuperAdmin && !isReadOnly ? (
             <Button className="gap-2" onClick={openCreate}>
@@ -194,11 +222,7 @@ export const TenantsPage = () => {
         <div className="rounded-2xl border border-border/70 bg-white p-4 shadow-card">
           <p className="text-sm text-muted-foreground">Alertas de limite</p>
           <p className="mt-1 font-display text-2xl font-semibold text-slate-900">
-            {
-              filteredTenants.filter(
-                (tenant) => tenant.usersLimitReached || tenant.dashboardsLimitReached,
-              ).length
-            }
+            {filteredTenants.filter((tenant) => hasTenantCommercialAlert(tenant)).length}
           </p>
         </div>
       </div>
@@ -238,13 +262,11 @@ export const TenantsPage = () => {
                 <Badge variant={tenant.status === 'active' ? 'success' : 'neutral'}>
                   {tenant.status === 'active' ? 'Ativo' : 'Inativo'}
                 </Badge>
-                {tenant.usersLimitReached || tenant.dashboardsLimitReached ? (
-                  <Badge variant="danger">Limite atingido</Badge>
-                ) : null}
+                {hasTenantCommercialAlert(tenant) ? <Badge variant="danger">Limite atingido</Badge> : null}
               </div>
             </div>
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <div className="rounded-xl border border-border/70 p-3">
                 <p className="text-xs uppercase tracking-[0.04em] text-muted-foreground">Usuarios</p>
                 <p className="mt-1 flex items-center gap-1 text-sm font-semibold text-slate-900">
@@ -253,9 +275,7 @@ export const TenantsPage = () => {
                 </p>
                 <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
                   <div
-                    className={`h-full rounded-full ${
-                      tenant.usersLimitReached ? 'bg-rose-500' : 'bg-primary/80'
-                    }`}
+                    className={`h-full rounded-full ${tenant.usersLimitReached ? 'bg-rose-500' : 'bg-primary/80'}`}
                     style={{ width: `${Math.min(tenant.usersUsagePercent, 100)}%` }}
                   />
                 </div>
@@ -267,10 +287,24 @@ export const TenantsPage = () => {
                 </p>
                 <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
                   <div
-                    className={`h-full rounded-full ${
-                      tenant.dashboardsLimitReached ? 'bg-rose-500' : 'bg-emerald-500'
-                    }`}
+                    className={`h-full rounded-full ${tenant.dashboardsLimitReached ? 'bg-rose-500' : 'bg-emerald-500'}`}
                     style={{ width: `${Math.min(tenant.dashboardsUsagePercent, 100)}%` }}
+                  />
+                </div>
+              </div>
+              <div className="rounded-xl border border-border/70 p-3">
+                <p className="text-xs uppercase tracking-[0.04em] text-muted-foreground">Suporte</p>
+                <p className="mt-1 flex items-center gap-1 text-sm font-semibold text-slate-900">
+                  <LifeBuoy className="h-3.5 w-3.5 text-muted-foreground" />
+                  {formatSupportHours(tenant.supportHoursRemaining)}h disponiveis
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Consumidas {formatSupportHours(tenant.supportHoursConsumed)}h de {formatSupportHours(tenant.supportHoursTotal)}h contratadas
+                </p>
+                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className={`h-full rounded-full ${tenant.supportLimitReached ? 'bg-rose-500' : 'bg-amber-500'}`}
+                    style={{ width: `${Math.min(tenant.supportUsagePercent, 100)}%` }}
                   />
                 </div>
               </div>
@@ -283,8 +317,29 @@ export const TenantsPage = () => {
               <div className="rounded-xl border border-border/70 p-3">
                 <p className="text-xs uppercase tracking-[0.04em] text-muted-foreground">Governanca</p>
                 <p className="mt-1 text-sm font-semibold text-slate-900">
-                  {tenant.usersLimitReached || tenant.dashboardsLimitReached ? 'Requer acao comercial' : 'Dentro do contratado'}
+                  {hasTenantCommercialAlert(tenant) ? 'Requer acao comercial' : 'Dentro do contratado'}
                 </p>
+              </div>
+              <div className="rounded-xl border border-border/70 bg-slate-50/60 p-3">
+                <p className="text-xs uppercase tracking-[0.04em] text-muted-foreground">Codigo de acesso</p>
+                <div className="mt-1 flex items-center gap-2">
+                  <p className="font-mono text-sm font-semibold tracking-wider text-slate-900">
+                    {tenant.joinCode || '—'}
+                  </p>
+                  {tenant.joinCode ? (
+                    <button
+                      type="button"
+                      title="Copiar codigo"
+                      className="rounded p-0.5 text-muted-foreground transition hover:text-foreground"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(tenant.joinCode)
+                        toast.success('Codigo copiado.')
+                      }}
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                  ) : null}
+                </div>
               </div>
             </div>
 
@@ -315,7 +370,7 @@ export const TenantsPage = () => {
           <DialogHeader>
             <DialogTitle>{form.id ? 'Editar tenant' : 'Novo tenant'}</DialogTitle>
             <DialogDescription>
-              Defina governanca de consumo por cliente para usuarios e dashboards.
+              Defina governanca de consumo por cliente para usuarios, dashboards e horas de suporte.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -326,6 +381,21 @@ export const TenantsPage = () => {
                 value={form.name}
                 onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
               />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700">Codigo de acesso</label>
+              <Input
+                className="mt-1 font-mono uppercase tracking-widest"
+                placeholder="Gerado automaticamente se vazio"
+                value={form.joinCode}
+                maxLength={20}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, joinCode: event.target.value.toUpperCase() }))
+                }
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Usuarios usam este codigo para ingressar via login com a Microsoft.
+              </p>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               <div>
@@ -372,10 +442,44 @@ export const TenantsPage = () => {
                 }
               />
             </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <label className="text-sm font-medium text-slate-700">Horas de suporte contratadas</label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.5"
+                  className="mt-1"
+                  value={form.supportHoursTotal}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      supportHoursTotal: Number(event.target.value || 0),
+                    }))
+                  }
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700">Horas de suporte consumidas</label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.5"
+                  className="mt-1"
+                  value={form.supportHoursConsumed}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      supportHoursConsumed: Number(event.target.value || 0),
+                    }))
+                  }
+                />
+              </div>
+            </div>
             <div className="rounded-xl border border-border/70 bg-muted/25 p-3 text-sm text-muted-foreground">
               <p className="flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4" />
-                Quando o tenant atingir os limites, o perfil global recebera aviso para acao comercial.
+                Apenas o perfil global ajusta horas de suporte. Quando um tenant atingir os limites de usuarios, dashboards ou suporte, o perfil global recebera aviso para acao comercial.
               </p>
             </div>
           </div>
@@ -390,4 +494,3 @@ export const TenantsPage = () => {
     </section>
   )
 }
-

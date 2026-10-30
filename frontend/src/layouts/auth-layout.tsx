@@ -1,33 +1,30 @@
-import { motion } from 'framer-motion'
+﻿import { BarChart3, Building2, ShieldCheck } from 'lucide-react'
 import { Outlet } from 'react-router-dom'
 
-export const AuthLayout = () => {
-  return (
-    <div className="grid min-h-screen bg-[linear-gradient(130deg,#f6f8fc_0%,#eef3fa_45%,#e9f2f7_100%)] lg:grid-cols-[minmax(0,1fr)_520px]">
-      <section className="relative hidden overflow-hidden p-12 lg:block">
-        <div className="absolute -left-10 top-24 h-44 w-44 rounded-full bg-primary/10 blur-3xl" />
-        <div className="absolute bottom-14 right-12 h-52 w-52 rounded-full bg-teal-200/40 blur-3xl" />
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35 }}
-          className="relative mx-auto mt-16 max-w-xl"
-        >
-          <div className="inline-flex rounded-full border border-primary/20 bg-white/80 px-4 py-1 text-xs font-semibold uppercase tracking-[0.08em] text-primary">
-            InsightHub
-          </div>
-          <h1 className="mt-5 font-display text-4xl font-semibold leading-tight text-slate-900">
-            Governanca analitica com experiencia SaaS premium.
-          </h1>
-          <p className="mt-4 max-w-lg text-base text-slate-600">
-            Distribua dashboards embarcados com controle multi-tenant, seguranca de acesso e branding por cliente.
-          </p>
-        </motion.div>
-      </section>
+const features = [
+  { icon: BarChart3, label: 'Seus dashboards em um só lugar' },
+  { icon: ShieldCheck, label: 'Controle de acesso por usuário e grupo' },
+  { icon: Building2, label: 'Um portal para cada cliente' },
+]
 
-      <section className="flex items-center justify-center p-4 sm:p-8">
-        <Outlet />
-      </section>
-    </div>
-  )
-}
+export const AuthLayout = () => (
+  <div className="lemon-login">
+    <aside className="lemon-login-brand">
+      <div className="flex items-center gap-3 text-xl font-extrabold">
+        <img src="/favicon.svg" alt="" className="h-9 w-9" />LemonAI
+      </div>
+      <div className="lemon-login-message">
+        <h1>Dados que geram<br /><span>decisões reais.</span></h1>
+        <p>Dashboards, informações e acesso aos seus indicadores em uma experiência simples e organizada.</p>
+        <div className="mt-9 space-y-4">
+          {features.map(({ icon: Icon, label }) => <div key={label} className="flex items-center gap-3.5 text-sm text-blue-50">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-white/15 bg-white/10"><Icon size={18} /></span>
+            {label}
+          </div>)}
+        </div>
+      </div>
+      <p className="text-xs text-blue-100/70">© {new Date().getFullYear()} LemonAI · Todos os direitos reservados</p>
+    </aside>
+    <main className="lemon-login-form"><Outlet /></main>
+  </div>
+)

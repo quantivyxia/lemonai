@@ -1,10 +1,9 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatDate } from '@/lib/utils'
-import { activities } from '@/mocks/analytics'
 import type { ActivityItem } from '@/types/entities'
 
 export const RecentActivityCard = ({ items }: { items?: ActivityItem[] }) => {
-  const data = items ?? activities
+  const data = items ?? []
 
   return (
     <Card className="h-full">

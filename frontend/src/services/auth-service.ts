@@ -5,7 +5,6 @@ import type { SessionUser } from '@/types/session'
 type LoginInput = {
   email: string
   password: string
-  remember: boolean
 }
 
 type BackendAuthUser = {
@@ -77,7 +76,22 @@ export const authService = {
     return session
   },
 
-  logout() {
+  async logout() {
+    const refresh = sessionStorageService.getRefreshToken()
+    if (refresh) {
+      try {
+        await apiRequest(
+          '/authentication/logout/',
+          {
+            method: 'POST',
+            body: JSON.stringify({ refresh }),
+          },
+          { retryOnAuthError: false },
+        )
+      } catch {
+        // A limpeza local continua sendo obrigatoria mesmo se o backend falhar.
+      }
+    }
     sessionStorageService.clear()
   },
 }

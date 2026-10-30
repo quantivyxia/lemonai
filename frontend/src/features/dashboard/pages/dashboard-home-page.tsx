@@ -1,6 +1,7 @@
 import { AlertTriangle, BarChart3, Building2, LogIn, Users } from 'lucide-react'
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { toast } from 'sonner'
 
 import { PageHeader } from '@/components/shared/page-header'
 import { StatCard } from '@/components/shared/stat-card'
@@ -10,34 +11,57 @@ import { useTenantScope } from '@/hooks/use-tenant-scope'
 import { AccessChartCard } from '@/features/dashboard/components/access-chart-card'
 import { RecentActivityCard } from '@/features/dashboard/components/recent-activity-card'
 import { TopDashboardsCard } from '@/features/dashboard/components/top-dashboards-card'
+import { platformApi } from '@/services/platform-api'
+import type { ActivityItem, AccessSeriesPoint } from '@/types/entities'
 
 export const DashboardHomePage = () => {
-  const { users, dashboards, tenants, accessLogs, activities, accessSeries } = usePlatformStore()
+  const { users, dashboards, tenants } = usePlatformStore()
   const { filterByTenant, isSuperAdmin, userRole } = useTenantScope()
   const canManagePlatform = userRole === 'super_admin' || userRole === 'analyst'
+  const [activities, setActivities] = useState<ActivityItem[]>([])
+  const [accessSeries, setAccessSeries] = useState<AccessSeriesPoint[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadHomeInsights = async () => {
+      try {
+        const payload = await platformApi.getDashboardHomeInsights()
+        if (cancelled) return
+        setActivities(payload.activities)
+        setAccessSeries(payload.accessSeries)
+      } catch (error) {
+        if (cancelled) return
+        const message = error instanceof Error ? error.message : 'Nao foi possivel carregar os indicadores da home.'
+        toast.error(message)
+      }
+    }
+
+    void loadHomeInsights()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const scopedUsers = useMemo(
     () => filterByTenant(users, (item) => ({ tenantId: item.tenantId })),
-    [filterByTenant],
+    [filterByTenant, users],
   )
   const scopedDashboards = useMemo(
     () => filterByTenant(dashboards, (item) => ({ tenantId: item.tenantId })),
-    [filterByTenant],
+    [filterByTenant, dashboards],
   )
   const scopedTenants = useMemo(
     () => filterByTenant(tenants, (item) => ({ tenantId: item.id })),
-    [filterByTenant],
-  )
-  const scopedLogs = useMemo(
-    () => filterByTenant(accessLogs, (item) => ({ tenantId: item.tenantId })),
-    [filterByTenant],
+    [filterByTenant, tenants],
   )
   const scopedActivities = useMemo(
     () =>
       filterByTenant(activities, (item) => ({
         tenantId: item.tenantId,
       })),
-    [filterByTenant],
+    [filterByTenant, activities],
   )
 
   const kpiMetrics = {
@@ -46,7 +70,7 @@ export const DashboardHomePage = () => {
     activeTenants: isSuperAdmin
       ? tenants.filter((tenant) => tenant.status === 'active').length
       : scopedTenants.filter((tenant) => tenant.status === 'active').length,
-    accesses7d: scopedLogs.filter((item) => item.status === 'success').length,
+    accesses7d: accessSeries.reduce((total, point) => total + point.accesses, 0),
   }
 
   const scopedTopDashboards = useMemo(
@@ -61,21 +85,6 @@ export const DashboardHomePage = () => {
         })),
     [scopedDashboards],
   )
-  const scopedAccessSeries = useMemo(() => {
-    if (isSuperAdmin) return accessSeries
-
-    const byDate = scopedLogs.reduce<Record<string, number>>((acc, log) => {
-      const dateKey = log.accessedAt.slice(0, 10)
-      acc[dateKey] = (acc[dateKey] ?? 0) + 1
-      return acc
-    }, {})
-
-    return accessSeries.map((point) => ({
-      date: point.date,
-      accesses: byDate[point.date] ?? 0,
-    }))
-  }, [isSuperAdmin, scopedLogs])
-
   const globalLimitAlerts = useMemo(() => {
     if (!isSuperAdmin) return []
 
@@ -92,15 +101,15 @@ export const DashboardHomePage = () => {
   return (
     <section className="animate-fade-in">
       <PageHeader
-        title="Visao executiva"
-        description="Panorama consolidado de tenants, consumo e governanca da plataforma."
+        title="Visão executiva"
+        description="Acompanhe seus clientes, dashboards e acessos à plataforma."
         actions={canManagePlatform ? (
           <>
             <Button variant="outline" asChild>
               <Link to="/audit">Ver auditoria</Link>
             </Button>
             <Button asChild>
-              <Link to="/dashboards">Novo dashboard</Link>
+              <Link to="/dashboards">Abrir dashboards</Link>
             </Button>
           </>
         ) : undefined}
@@ -125,14 +134,14 @@ export const DashboardHomePage = () => {
       ) : null}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Total de usuarios" value={`${kpiMetrics.users}`} trend="+8% vs semana anterior" icon={Users} />
-        <StatCard label="Dashboards ativos" value={`${kpiMetrics.dashboards}`} trend="+5 novos publicados" icon={BarChart3} />
-        <StatCard label="Tenants ativos" value={`${kpiMetrics.activeTenants}`} trend="2 com onboarding em andamento" icon={Building2} />
-        <StatCard label="Acessos em 7 dias" value={`${kpiMetrics.accesses7d}`} trend="+12% em relacao ao periodo anterior" icon={LogIn} />
+        <StatCard label="Total de usuários" value={`${kpiMetrics.users}`} icon={Users} />
+        <StatCard label="Dashboards ativos" value={`${kpiMetrics.dashboards}`} icon={BarChart3} />
+        <StatCard label="Clientes ativos" value={`${kpiMetrics.activeTenants}`} icon={Building2} />
+        <StatCard label="Acessos em 7 dias" value={`${kpiMetrics.accesses7d}`} icon={LogIn} />
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-[1.6fr_1fr]">
-        <AccessChartCard data={scopedAccessSeries} />
+        <AccessChartCard data={accessSeries} />
         <TopDashboardsCard items={scopedTopDashboards} />
       </div>
 
