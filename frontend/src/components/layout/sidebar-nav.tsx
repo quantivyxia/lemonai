@@ -1,4 +1,5 @@
 import './sidebar-nav.css'
+import culturaLogo from '@/assets/cultura-inglesa.svg'
 
 import {
   PanelLeftClose,
@@ -131,7 +132,8 @@ export const SidebarNav = ({ mobile = false, onNavigate }: { mobile?: boolean; o
     user?.role === 'super_admin'
       ? 'LemonAI'
       : tenantBranding?.platformName?.trim() || user?.tenantName || 'LemonAI'
-  const logoUrl = user?.role === 'super_admin' ? '/favicon.svg' : tenantBranding?.logoUrl
+  const defaultClientLogo = user?.tenantName?.trim().toLocaleLowerCase('pt-BR') === 'cultura inglesa' ? culturaLogo : undefined
+  const logoUrl = user?.role === 'super_admin' ? '/favicon.svg' : tenantBranding?.logoUrl || defaultClientLogo
   const [failedLogo, setFailedLogo] = useState<string>()
   const initials = portalName.split(/\s+/).map(part => part[0]).slice(0, 2).join('').toUpperCase()
 
@@ -148,8 +150,8 @@ export const SidebarNav = ({ mobile = false, onNavigate }: { mobile?: boolean; o
     >
       <Link onClick={handleNavigate} to="/" aria-label={portalName} className="sidebar-brand">
         <span aria-hidden="true" className="sidebar-monogram">
-          {logoUrl && failedLogo !== logoUrl
-            ? <img src={logoUrl} onError={() => setFailedLogo(logoUrl)} alt="" />
+          {(logoUrl && failedLogo !== logoUrl) || defaultClientLogo
+            ? <img src={failedLogo === logoUrl ? defaultClientLogo : logoUrl} onError={() => setFailedLogo(logoUrl)} alt="" />
             : <span>{initials}</span>}
         </span>
         <span className="sidebar-label sidebar-tenant-info"><strong>{portalName}</strong><small>Portal do cliente</small></span>
