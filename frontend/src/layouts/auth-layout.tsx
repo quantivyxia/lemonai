@@ -1,5 +1,6 @@
 ﻿import { BarChart3, Building2, ShieldCheck } from 'lucide-react'
 import { Outlet } from 'react-router-dom'
+import { LoginAnimation } from '@/components/layout/login-animation'
 
 const features = [
   { icon: BarChart3, label: 'Seus dashboards em um só lugar' },
@@ -9,10 +10,11 @@ const features = [
 
 export const AuthLayout = () => (
   <div className="lemon-login">
-    <aside className="lemon-login-brand">
+    <aside className="lemon-login-brand lemon-login-animated">
       <div className="flex items-center gap-3 text-xl font-extrabold">
         <img src="/favicon.svg" alt="" className="h-9 w-9" />LemonAI
       </div>
+      <div className="lemon-login-blue-body">
       <div className="lemon-login-message">
         <h1>Dados que geram<br /><span>decisões reais.</span></h1>
         <p>Dashboards, informações e acesso aos seus indicadores em uma experiência simples e organizada.</p>
@@ -22,6 +24,8 @@ export const AuthLayout = () => (
             {label}
           </div>)}
         </div>
+      </div>
+      <LoginAnimation />
       </div>
       <p className="text-xs text-blue-100/70">© {new Date().getFullYear()} LemonAI · Todos os direitos reservados</p>
     </aside>
