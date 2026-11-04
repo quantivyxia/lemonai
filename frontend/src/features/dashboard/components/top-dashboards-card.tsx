@@ -2,7 +2,6 @@ import { ArrowUpRight } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { topDashboards } from '@/mocks/analytics'
 
 type TopDashboardItem = {
   id: string
@@ -11,7 +10,7 @@ type TopDashboardItem = {
 }
 
 export const TopDashboardsCard = ({ items }: { items?: TopDashboardItem[] }) => {
-  const data = items ?? topDashboards
+  const data = items ?? []
 
   return (
     <Card>

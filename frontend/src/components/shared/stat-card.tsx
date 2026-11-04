@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card'
 type StatCardProps = {
   label: string
   value: string
-  trend: string
+  trend?: string
   icon: LucideIcon
 }
 
@@ -19,7 +19,7 @@ export const StatCard = ({ label, value, trend, icon: Icon }: StatCardProps) => 
             <div>
               <p className="text-sm font-medium text-muted-foreground">{label}</p>
               <p className="mt-3 font-display text-2xl font-semibold text-slate-900">{value}</p>
-              <p className="mt-2 text-xs font-medium text-emerald-600">{trend}</p>
+              {trend && <p className="mt-2 text-xs font-medium text-emerald-600">{trend}</p>}
             </div>
             <div className="rounded-xl bg-primary/10 p-2.5 text-primary">
               <Icon className="h-5 w-5" />
