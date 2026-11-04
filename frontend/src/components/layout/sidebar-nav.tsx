@@ -1,5 +1,6 @@
 import './sidebar-nav.css'
 import culturaLogo from '@/assets/cultura-inglesa.svg'
+import baianaLogo from '@/assets/faculdade-baiana.png'
 
 import {
   PanelLeftClose,
@@ -132,7 +133,12 @@ export const SidebarNav = ({ mobile = false, onNavigate }: { mobile?: boolean; o
     user?.role === 'super_admin'
       ? 'LemonAI'
       : tenantBranding?.platformName?.trim() || user?.tenantName || 'LemonAI'
-  const defaultClientLogo = user?.tenantName?.trim().toLocaleLowerCase('pt-BR') === 'cultura inglesa' ? culturaLogo : undefined
+  const clientName = user?.tenantName?.trim().replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR')
+  const defaultClientLogo = clientName === 'cultura inglesa'
+    ? culturaLogo
+    : clientName === 'faculdade baiana' || clientName === 'faculdade baiana de direito'
+      ? baianaLogo
+      : undefined
   const logoUrl = user?.role === 'super_admin' ? '/favicon.svg' : tenantBranding?.logoUrl || defaultClientLogo
   const [failedLogo, setFailedLogo] = useState<string>()
   const initials = portalName.split(/\s+/).map(part => part[0]).slice(0, 2).join('').toUpperCase()
