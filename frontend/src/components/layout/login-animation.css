@@ -1,0 +1,79 @@
+.lemon-login-brand.lemon-login-animated { position:relative; isolation:isolate; overflow:hidden; padding:36px; background:radial-gradient(ellipse at 60% 40%, oklch(.4 .17 262), oklch(.3 .13 262) 70%); }
+.lemon-login-blue-body { display:flex; align-items:center; gap:24px; margin-block:auto; padding-block:32px; }
+.lemon-login-animated .lemon-login-message { flex:1; min-width:0; padding:0; margin:0; z-index:1; }
+.lemon-login-animated .lemon-login-message h1 { font-size:clamp(30px,2.3vw,44px); }
+.lemon-login-animated .lemon-login-message > p { font-size:14px; }
+.lemon-login-animated > :not(.lemon-login-blue-body) { z-index:1; }
+.login-animation { display:contents; --primary-foreground:oklch(.99 0 0); --success-hex:#34d399; --accent-hex:#f5c518; }
+.login-animation #net { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:-1; }
+.login-animation .fade-up { opacity:0; animation:loginFadeUp .7s cubic-bezier(.22,1,.36,1) forwards; }
+@keyframes loginFadeUp { from { opacity:0; transform:translateY(18px) } to { opacity:1; transform:translateY(0) } }
+  /* ===== 3D dashboard stack ===== */
+  .login-animation .stack-scene { position: relative; width: 380px; height: 430px; flex: none; perspective: 1100px; }
+  .login-animation .stack-glow {
+    position: absolute; inset: 40px; border-radius: 999px;
+    background: rgb(245 197 24 / 0.15); filter: blur(60px);
+    animation: glowPulse 5s ease-in-out infinite;
+  }
+  @keyframes glowPulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+  .login-animation .stack { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; }
+
+  .login-animation .glass {
+    position: absolute;
+    border-radius: 16px;
+    border: 1px solid rgb(255 255 255 / 0.15);
+    background: rgb(255 255 255 / 0.07);
+    box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.4);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    padding: 12px;
+  }
+  .login-animation .card-label { font-size: 9px; font-weight: 600; letter-spacing: 0.08em; color: rgb(255 255 255 / 0.7); }
+  .login-animation .live { display: inline-flex; align-items: center; gap: 4px; color: var(--success-hex); font-size: 9px; font-weight: 600; letter-spacing: 0.08em; }
+  .login-animation .live-dot { width: 6px; height: 6px; border-radius: 999px; background: var(--success-hex); animation: pulseDot 1.6s ease-in-out infinite; }
+  @keyframes pulseDot { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+  .login-animation .shimmer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; border-radius: 16px; }
+  .login-animation .shimmer::before {
+    content: ""; position: absolute; top: 0; bottom: 0; left: -40%; width: 35%;
+    background: linear-gradient(100deg, transparent, rgb(255 255 255 / 0.12), transparent);
+    filter: blur(6px);
+    animation: shimmer 4.5s ease-in-out infinite;
+  }
+  @keyframes shimmer {
+    0% { left: -40%; } 55% { left: 130%; } 100% { left: 130%; }
+  }
+
+  /* Receita */
+  .login-animation .card-revenue { left: 8px; top: 0; width: 300px; height: 150px; color: var(--primary-foreground); animation-delay: 0.1s; }
+  .login-animation .card-revenue .head { display: flex; justify-content: space-between; align-items: center; }
+  .login-animation .card-revenue .chart { margin-top: 8px; height: 105px; width: 100%; overflow: visible; }
+
+  /* Alunos */
+  .login-animation .card-students { left: 0; top: 178px; width: 150px; height: 86px; animation-delay: 0.35s; }
+  .login-animation .card-students .num { margin-top: 4px; font-size: 1.5rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .login-animation .card-students .pct { font-size: 10px; font-weight: 600; color: var(--success-hex); }
+
+  /* Filial */
+  .login-animation .card-branch { left: 160px; top: 162px; width: 180px; height: 115px; animation-delay: 0.5s; }
+  .login-animation .branch-bars { margin-top: 8px; height: 70px; display: flex; align-items: flex-end; gap: 6px; }
+  .login-animation .branch-bars > div { flex: 1; border-radius: 4px 4px 0 0; transition: height 1s ease-in-out; }
+  .login-animation .branch-bars > div:nth-child(odd) { background: linear-gradient(to top, rgb(255 197 24 / 0.6), var(--accent-hex)); }
+  .login-animation .branch-bars > div:nth-child(even) { background: linear-gradient(to top, rgb(99 102 241 / 0.6), rgb(129 140 248)); }
+
+  /* Código */
+  .login-animation .card-code { left: 50px; top: 290px; width: 300px; background: oklch(0.3 0.13 262 / 0.6); animation-delay: 0.7s; }
+  .login-animation .card-code pre {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10.5px; line-height: 1.55; white-space: pre-wrap;
+  }
+  .login-animation .tok-c { color: rgb(255 255 255 / 0.45); }
+  .login-animation .tok-k { color: var(--accent-hex); }
+  .login-animation .tok-t { color: rgb(255 255 255 / 0.9); }
+  .login-animation .tok-f { color: var(--success-hex); }
+  .login-animation .tok-s { color: rgb(245 197 24 / 0.8); }
+  .login-animation .caret { display: inline-block; width: 6px; height: 12px; margin-left: 2px; vertical-align: -2px; background: var(--accent-hex); animation: pulseDot 0.9s step-end infinite; }
+
+
+@media(min-width:1024px) and (max-width:1399px) { .lemon-login-blue-body { flex-direction:column; align-items:flex-start; gap:30px; } .login-animation .stack-scene { align-self:center; } }
+@media(prefers-reduced-motion:reduce) { .login-animation *, .login-animation *::before { animation:none!important; transition:none!important; } .login-animation .fade-up { opacity:1; } }

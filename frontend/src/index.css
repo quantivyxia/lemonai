@@ -4,15 +4,41 @@
 @tailwind components;
 @tailwind utilities;
 
+.lemon-shell { min-height: 100dvh; background: #f4f7fb; }
+.lemon-app { display: flex; width: 100%; }
+.lemon-workspace { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 100dvh; }
+.lemon-topbar { position: sticky; top: 0; z-index: 20; flex-shrink: 0; background: white; border-bottom: 1px solid #e3e9f2; }
+.lemon-breadcrumb { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.lemon-main { flex: 1; padding: 28px; width: 100%; max-width: 1600px; margin-inline: auto; }
+.lemon-report-main { flex: 1; min-width: 0; padding: 12px 16px; }
+.lemon-shell-dashboard .lemon-app { height: 100dvh; overflow: hidden; }
+.lemon-shell-dashboard .lemon-workspace { min-height: 0; }
+.lemon-dashboard-main { display: flex; flex: 1; min-height: 0; padding: 12px 16px 0; }
+.lemon-dashboard-page { display: flex; flex: 1; flex-direction: column; min-height: 0; min-width: 0; background: #f4f7fb; }
+.lemon-dashboard-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; flex-shrink: 0; gap: 12px; padding: 0 0 12px; }
+.lemon-dashboard-content { flex: 1; min-height: 0; min-width: 0; overflow: auto; border-radius: 10px 10px 0 0; }
+.lemon-dashboard-content > iframe { display: block; height: 100% !important; min-height: 0; border: 0; border-radius: 0; }
+.lemon-dashboard-page:fullscreen { padding: 12px 16px 0; }
+.lemon-login { display: flex; min-height: 100dvh; background: white; }
+.lemon-login-brand { display: flex; width: 50%; padding: 48px; flex-direction: column; color: white; background-color: #0b2a6b; background-image: radial-gradient(rgba(255,255,255,.14) 1px, transparent 1.2px); background-size: 28px 28px; }
+.lemon-login-message { margin-block: auto; padding-block: 48px; max-width: 520px; }
+.lemon-login-message h1 { font-size: clamp(36px, 3.7vw, 52px); font-weight: 800; line-height: 1.08; letter-spacing: -.035em; }
+.lemon-login-message h1 span { color: #f5c518; }
+.lemon-login-message > p { margin-top: 20px; max-width: 430px; font-size: 17px; line-height: 1.55; color: #d5dff0; }
+.lemon-login-form { display: flex; flex: 1; align-items: center; justify-content: center; padding: 48px 32px; }
+@media (max-width: 1023px) { .lemon-login-brand { display: none; } }
+@media (max-width: 640px) { .lemon-main { padding: 20px 16px; } .lemon-dashboard-main { padding: 10px 8px 0; } .lemon-login-form { padding: 32px 24px; } }
+@media (prefers-reduced-motion: reduce) { .animate-fade-in { animation: none !important; } }
+
 @layer base {
   :root {
-    --background: 214 36% 97%;
+    --background: 214 47% 97%;
     --foreground: 222 47% 11%;
     --card: 0 0% 100%;
     --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
-    --primary: 212 87% 44%;
+    --primary: 215 82% 46%;
     --primary-foreground: 210 40% 98%;
     --secondary: 210 40% 96%;
     --secondary-foreground: 222 47% 11%;
@@ -22,14 +48,14 @@
     --accent-foreground: 222 47% 11%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 210 40% 98%;
-    --border: 214 26% 88%;
-    --input: 214 26% 88%;
+    --border: 216 37% 92%;
+    --input: 216 37% 88%;
     --ring: 212 87% 44%;
-    --radius-xl: 1.1rem;
-    --radius-lg: 0.85rem;
-    --radius-md: 0.7rem;
+    --radius-xl: 0.75rem;
+    --radius-lg: 0.625rem;
+    --radius-md: 0.5rem;
     --radius-sm: 0.55rem;
-    --shadow-card: 0 10px 34px rgba(15, 23, 42, 0.04);
+    --shadow-card: 0 1px 3px rgba(11, 42, 107, 0.025);
     --shadow-floating: 0 16px 44px rgba(15, 23, 42, 0.12);
   }
 
