@@ -163,6 +163,7 @@ export const SidebarNav = ({ mobile = false, onNavigate }: { mobile?: boolean; o
         <span className="sidebar-label sidebar-tenant-info"><strong>{portalName}</strong><small>Portal do cliente</small></span>
       </Link>
 
+      <div className="sidebar-menu-scroll">
       <p className="sidebar-label sidebar-group">Geral</p>
       <nav aria-label="Navegação principal" className="space-y-1">
         {visibleMainNav.map((item) => {
@@ -236,6 +237,7 @@ export const SidebarNav = ({ mobile = false, onNavigate }: { mobile?: boolean; o
           )
         })}
       </nav>
+      </div>
       <div className="sidebar-bottom">
       {!mobile && <button type="button" className="sidebar-toggle" onClick={() => { setPinned(value => !value); setCollapsedAfterNavigation(true) }} aria-label={pinned ? 'Recolher menu' : 'Fixar menu aberto'} aria-pressed={pinned}>
         {pinned ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
